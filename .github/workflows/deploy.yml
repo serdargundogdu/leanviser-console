@@ -4,6 +4,8 @@ name: Deploy · Cloud Run
 #   GCP_PROJECT  — GCP proje kimliği
 #   GCP_REGION   — Cloud Run bölgesi (ör. europe-west1)
 #   GCP_SA_KEY   — deploy yetkili Service Account JSON anahtarı
+# Secret'lar tanımlı değilken deploy işi ATLANIR (workflow kırmızıya düşmez);
+# secret'lar girilince main push veya manuel tetikte gerçek deploy çalışır.
 # Backend, Dockerfile üzerinden kaynaktan (Cloud Build) derlenip dağıtılır.
 
 on:
@@ -15,8 +17,29 @@ env:
   SERVICE: leanviser-console-backend
 
 jobs:
+  guard:
+    name: Check GCP secrets
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          if [ -n "$GCP_SA_KEY" ] && [ -n "$GCP_PROJECT" ] && [ -n "$GCP_REGION" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "GCP secret'ları henüz tanımlı değil — deploy atlanıyor (iskelet)."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     name: Deploy backend to Cloud Run
+    needs: guard
+    if: needs.guard.outputs.configured == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

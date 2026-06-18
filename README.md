@@ -67,6 +67,8 @@ curl http://localhost:8080/health
   - `GCP_REGION` — Cloud Run bölgesi (ör. `europe-west1`)
   - `GCP_SA_KEY` — deploy yetkili Service Account JSON anahtarı
 
+  Secret'lar tanımlı değilken deploy işi atlanır (workflow kırmızıya düşmez); girilince gerçek deploy çalışır.
+
 ## Kapsam notu (bu dilim)
 
 Bu dilim yalnız **repo scaffold + CI/CD**'dir. **Domain mantığı yok, dış entegrasyon yok.**
