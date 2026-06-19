@@ -19,6 +19,7 @@ from app.modules.finance.adapters.http.dependencies import (
     get_einvoice_supplier,
     get_exchange_rate_provider,
     get_invoice_repository,
+    get_invoice_series,
 )
 from app.modules.finance.adapters.uyumsoft_einvoice_gateway import EInvoiceGatewayError
 from app.modules.finance.application.compile_invoice import (
@@ -36,6 +37,7 @@ from app.modules.finance.application.issue_einvoice import (
     IssueEInvoiceCommand,
 )
 from app.modules.finance.domain.expense import Expense, ExpenseType
+from app.modules.finance.domain.gib_invoice_number import GibInvoiceNumber
 from app.modules.finance.domain.invoice import Invoice, InvoiceStateError, InvoiceStatus
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
 from app.modules.finance.domain.vat import VatRate
@@ -135,6 +137,7 @@ class InvoiceResponse(BaseModel):
     total: str
     vat_total: str
     gross_total: str
+    gib_number: str | None = None
     ettn: str | None = None
 
 
@@ -204,6 +207,7 @@ def _to_response(invoice: Invoice) -> InvoiceResponse:
         total=str(invoice.total().amount),
         vat_total=str(invoice.vat_total().amount),
         gross_total=str(invoice.gross_total().amount),
+        gib_number=invoice.gib_number,
         ettn=invoice.ettn,
     )
 
@@ -293,18 +297,35 @@ def issue_einvoice(
     repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
     gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
     supplier: Annotated[Party, Depends(get_einvoice_supplier)],
+    series: Annotated[str, Depends(get_invoice_series)],
 ) -> InvoiceResponse:
     """Onaylı faturayı entegratöre e-Fatura/e-Arşiv olarak keser.
 
-    Başarıda fatura Sent'e geçer ve ETTN kaydedilir. Entegratörün iş kuralı reddi
-    422, taşıma/SOAP hatası 502, durum hatası (onaylı değil) 409 döner.
+    Resmi GİB numarası (seri + yıl + sıra) burada atanır ve faturaya yazılır;
+    gönderim başarısız olursa numara faturada kalır (yeniden deneme aynı numarayı
+    kullanır, ardışıklık korunur). Başarıda fatura Sent'e geçer, ETTN kaydedilir.
+    Onaylı değilse 409, iş kuralı reddi 422, taşıma/SOAP hatası 502.
     """
     invoice = repository.get(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
+    if invoice.status is not InvoiceStatus.Approved:
+        raise HTTPException(status_code=409, detail="Yalnız onaylı fatura e-Fatura kesilebilir")
+
+    # Numarayı yalnız ilk kez ata; başarısız gönderim sonrası retry'da yeniden kullan.
+    if invoice.gib_number is None:
+        sequence = repository.next_invoice_sequence(series, invoice.issue_date.year)
+        invoice.gib_number = GibInvoiceNumber.from_parts(
+            series, invoice.issue_date.year, sequence
+        ).value
+        repository.save(invoice)
+
     customer = Party(**request.customer.model_dump())
     command = IssueEInvoiceCommand(
-        customer=customer, supplier=supplier, customer_alias=request.customer_alias
+        customer=customer,
+        supplier=supplier,
+        gib_number=invoice.gib_number,
+        customer_alias=request.customer_alias,
     )
     try:
         result = IssueEInvoice(gateway).execute(invoice, command)

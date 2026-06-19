@@ -44,6 +44,7 @@ export type InvoiceResponse = {
   total: string;
   vat_total: string;
   gross_total: string;
+  gib_number: string | null;
   ettn: string | null;
 };
 

@@ -81,6 +81,8 @@ class Invoice:
         self.issue_date = issue_date
         self._status = InvoiceStatus.Draft
         self._lines: list[InvoiceLine] = []
+        # Resmi GİB fatura numarası (16 hane); e-Fatura kesilirken atanır.
+        self.gib_number: str | None = None
         # Entegratörce atanan ETTN (e-belge kimliği); gönderildiğinde dolar.
         self.ettn: str | None = None
 
@@ -93,6 +95,7 @@ class Invoice:
         issue_date: date,
         status: InvoiceStatus,
         lines: list[InvoiceLine],
+        gib_number: str | None = None,
         ettn: str | None = None,
     ) -> Invoice:
         """Kalıcılıktan yeniden kurar; durum/kalemleri doğrudan yükler.
@@ -103,6 +106,7 @@ class Invoice:
         invoice = cls(id, customer_company, currency, issue_date)
         invoice._status = status
         invoice._lines = list(lines)
+        invoice.gib_number = gib_number
         invoice.ettn = ettn
         return invoice
 

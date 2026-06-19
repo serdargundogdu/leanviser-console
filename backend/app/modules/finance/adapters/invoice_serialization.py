@@ -25,6 +25,7 @@ def invoice_to_dict(invoice: Invoice) -> dict:
         "currency": invoice.currency.code,
         "issue_date": invoice.issue_date.isoformat(),
         "status": invoice.status.value,
+        "gib_number": invoice.gib_number,
         "ettn": invoice.ettn,
         "lines": [
             {
@@ -56,5 +57,6 @@ def invoice_from_dict(data: dict) -> Invoice:
         issue_date=date.fromisoformat(data["issue_date"]),
         status=InvoiceStatus(data["status"]),
         lines=lines,
+        gib_number=data.get("gib_number"),
         ettn=data.get("ettn"),
     )

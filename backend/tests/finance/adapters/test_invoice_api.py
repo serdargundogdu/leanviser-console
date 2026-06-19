@@ -1,5 +1,6 @@
 """Finance HTTP uç noktası testleri (FastAPI TestClient; sabit-kur dependency override)."""
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -222,6 +223,35 @@ def test_issue_einvoice_marks_sent_and_records_ettn():
     body = response.json()
     assert body["status"] == "Sent"
     assert body["ettn"] == "ETTN-API"
+
+
+def test_issue_assigns_gib_number():
+    client.post("/finance/invoices", json=_expense_payload("INV-GIB"))
+    client.post("/finance/invoices/INV-GIB/approve")
+    _fake_gateway.result = EInvoiceSendResult(succeeded=True, invoice_id="INV-GIB", ettn="ETTN-GIB")
+    body = client.post(
+        "/finance/invoices/INV-GIB/issue",
+        json={"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}},
+    ).json()
+    assert body["status"] == "Sent"
+    assert re.match(r"^LVS\d{13}$", body["gib_number"])  # 3 harf + yıl + 9 sıra
+
+
+def test_issue_retry_reuses_gib_number():
+    client.post("/finance/invoices", json=_expense_payload("INV-RETRY"))
+    client.post("/finance/invoices/INV-RETRY/approve")
+    payload = {"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}}
+    # İlk deneme entegratörce reddedilir; numara atanır ve faturada kalır.
+    _fake_gateway.result = EInvoiceSendResult(succeeded=False, message="geçici hata")
+    assert client.post("/finance/invoices/INV-RETRY/issue", json=payload).status_code == 422
+    assigned = client.get("/finance/invoices/INV-RETRY").json()["gib_number"]
+    assert assigned is not None
+    # Yeniden deneme aynı numarayı kullanır (ardışıklık korunur, boşluk olmaz).
+    _fake_gateway.result = EInvoiceSendResult(
+        succeeded=True, invoice_id="INV-RETRY", ettn="ETTN-RETRY"
+    )
+    retry = client.post("/finance/invoices/INV-RETRY/issue", json=payload).json()
+    assert retry["gib_number"] == assigned
 
 
 def test_issue_unapproved_invoice_returns_409():

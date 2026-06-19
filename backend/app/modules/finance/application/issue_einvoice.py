@@ -35,10 +35,11 @@ class EInvoiceIssueError(Exception):
 
 @dataclass(frozen=True)
 class IssueEInvoiceCommand:
-    """Kesme girdisi: domain'de olmayan müşteri/gönderici kimliği ve alıcı etiketi."""
+    """Kesme girdisi: müşteri/gönderici kimliği, resmi GİB numarası, alıcı etiketi."""
 
     customer: Party
     supplier: Party
+    gib_number: str  # resmi 16 haneli GİB fatura numarası (cbc:ID)
     customer_alias: str | None = None
 
 
@@ -57,7 +58,7 @@ class IssueEInvoice:
             else _EARCHIVE_PROFILE
         )
         request = EInvoiceRequest(
-            number=invoice.id,
+            number=command.gib_number,  # resmi GİB numarası -> cbc:ID
             uuid=str(uuid.uuid4()),
             issue_date=invoice.issue_date,
             currency=invoice.currency.code,
@@ -76,4 +77,7 @@ class IssueEInvoice:
                 for line in invoice.lines
             ),
         )
-        return self._gateway.send_invoice(request, customer_alias=command.customer_alias)
+        # LocalDocumentId = iç fatura id (izlenebilirlik); cbc:ID = resmi numara.
+        return self._gateway.send_invoice(
+            request, customer_alias=command.customer_alias, local_document_id=invoice.id
+        )

@@ -73,9 +73,11 @@ def test_legacy_line_without_vat_rate_defaults_to_general_rate():
     assert restored.lines[0].vat_rate == VatRate(Decimal("0.20"))
 
 
-def test_roundtrip_preserves_ettn():
+def test_roundtrip_preserves_ettn_and_gib_number():
     invoice = _invoice()  # onaylı
+    invoice.gib_number = "LVS2026000000003"
     invoice.send(ettn="ETTN-X")  # Sent + ETTN
     restored = invoice_from_dict(invoice_to_dict(invoice))
     assert restored.status is InvoiceStatus.Sent
     assert restored.ettn == "ETTN-X"
+    assert restored.gib_number == "LVS2026000000003"

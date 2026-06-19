@@ -37,3 +37,11 @@ class InvoiceRepository(Protocol):
     def get_source(self, invoice_id: str) -> dict | None:
         """Faturanın kaynak girdilerini döndürür; yoksa None."""
         ...
+
+    def next_invoice_sequence(self, series: str, year: int) -> int:
+        """(seri, yıl) için bir sonraki sıra numarasını atomik olarak üretir (1'den başlar).
+
+        GİB ardışık numaralandırması için: her çağrı bir öncekinden bir büyük,
+        boşluksuz değer döndürür.
+        """
+        ...

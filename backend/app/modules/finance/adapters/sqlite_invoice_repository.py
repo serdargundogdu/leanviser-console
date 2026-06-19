@@ -32,6 +32,11 @@ class SqliteInvoiceRepository(InvoiceRepository):
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS invoice_sources (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
         )
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS invoice_sequences "
+            "(series TEXT NOT NULL, year INTEGER NOT NULL, last_sequence INTEGER NOT NULL, "
+            "PRIMARY KEY (series, year))"
+        )
         self._connection.commit()
 
     def save(self, invoice: Invoice) -> None:
@@ -82,3 +87,14 @@ class SqliteInvoiceRepository(InvoiceRepository):
         if row is None:
             return None
         return json.loads(row[0])
+
+    def next_invoice_sequence(self, series: str, year: int) -> int:
+        with self._lock:
+            row = self._connection.execute(
+                "INSERT INTO invoice_sequences (series, year, last_sequence) VALUES (?, ?, 1) "
+                "ON CONFLICT(series, year) DO UPDATE SET last_sequence = last_sequence + 1 "
+                "RETURNING last_sequence",
+                (series, year),
+            ).fetchone()
+            self._connection.commit()
+        return int(row[0])

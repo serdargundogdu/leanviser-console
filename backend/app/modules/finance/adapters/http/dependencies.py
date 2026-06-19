@@ -65,6 +65,11 @@ def get_einvoice_gateway() -> EInvoiceGateway:
     return _einvoice_gateway
 
 
+def get_invoice_series() -> str:
+    """GİB fatura numarası seri öneki (3 büyük harf). Env yoksa 'LVS'."""
+    return os.environ.get("LEANVISER_INVOICE_SERIES", "LVS")
+
+
 def get_einvoice_supplier() -> Party:
     """Gönderici (LeanViser) e-Fatura kimliği. Env yoksa TEST hesabı varsayılır.
 

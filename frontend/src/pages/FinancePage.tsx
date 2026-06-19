@@ -177,7 +177,9 @@ export default function FinancePage() {
         },
         customer_alias: issueCustomer.alias || null,
       });
-      setNotice(`${result.id} e-Fatura olarak kesildi · ETTN ${result.ettn}`);
+      setNotice(
+        `${result.id} kesildi · GİB No ${result.gib_number ?? "-"} · ETTN ${result.ettn ?? "-"}`,
+      );
       setIssuingId(null);
       loadInvoices();
     } catch (err) {
@@ -505,6 +507,9 @@ export default function FinancePage() {
                   <td style={leftCell}>{saved.customer_company}</td>
                   <td style={leftCell}>
                     <StatusBadge status={saved.status} />
+                    {saved.gib_number && (
+                      <div style={{ fontSize: 11, color: "#6b7280" }}>GİB No: {saved.gib_number}</div>
+                    )}
                     {saved.ettn && (
                       <div style={{ fontSize: 11, color: "#6b7280" }}>ETTN: {saved.ettn}</div>
                     )}

@@ -89,3 +89,25 @@ def test_delete_also_removes_source():
     repo.save_source("INV-1", {"invoice_id": "INV-1"})
     repo.delete("INV-1")
     assert repo.get_source("INV-1") is None
+
+
+def test_next_invoice_sequence_increments_per_series_and_year():
+    repo = SqliteInvoiceRepository(":memory:")
+    assert repo.next_invoice_sequence("LVS", 2026) == 1
+    assert repo.next_invoice_sequence("LVS", 2026) == 2
+    assert repo.next_invoice_sequence("LVS", 2026) == 3
+    # Farklı yıl ve farklı seri kendi sayaçlarına sahiptir.
+    assert repo.next_invoice_sequence("LVS", 2027) == 1
+    assert repo.next_invoice_sequence("ABC", 2026) == 1
+
+
+def test_invoice_gib_number_and_ettn_roundtrip():
+    repo = SqliteInvoiceRepository(":memory:")
+    invoice = _invoice()
+    invoice.gib_number = "LVS2026000000007"
+    invoice.approve()
+    invoice.send(ettn="ETTN-7")
+    repo.save(invoice)
+    loaded = repo.get("INV-1")
+    assert loaded.gib_number == "LVS2026000000007"
+    assert loaded.ettn == "ETTN-7"

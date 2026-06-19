@@ -32,6 +32,11 @@ class PostgresInvoiceRepository(InvoiceRepository):
                 "CREATE TABLE IF NOT EXISTS invoice_sources "
                 "(id TEXT PRIMARY KEY, data JSONB NOT NULL)"
             )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS invoice_sequences "
+                "(series TEXT NOT NULL, year INTEGER NOT NULL, last_sequence INTEGER NOT NULL, "
+                "PRIMARY KEY (series, year))"
+            )
 
     def save(self, invoice: Invoice) -> None:
         with psycopg.connect(self._dsn) as connection:
@@ -76,3 +81,14 @@ class PostgresInvoiceRepository(InvoiceRepository):
         if row is None:
             return None
         return row[0]
+
+    def next_invoice_sequence(self, series: str, year: int) -> int:
+        with psycopg.connect(self._dsn) as connection:
+            row = connection.execute(
+                "INSERT INTO invoice_sequences (series, year, last_sequence) VALUES (%s, %s, 1) "
+                "ON CONFLICT (series, year) DO UPDATE SET last_sequence = "
+                "invoice_sequences.last_sequence + 1 "
+                "RETURNING last_sequence",
+                (series, year),
+            ).fetchone()
+        return int(row[0])

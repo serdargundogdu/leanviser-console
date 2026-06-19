@@ -30,6 +30,7 @@ class _FakeGateway:
         )
         self.sent_request: EInvoiceRequest | None = None
         self.sent_alias: str | None = None
+        self.sent_local_document_id: str | None = None
 
     def is_einvoice_user(self, vkn_tckn: str, alias: str | None = None) -> bool:
         return self._is_user
@@ -37,12 +38,13 @@ class _FakeGateway:
     def send_invoice(self, req, *, customer_alias=None, local_document_id=None):
         self.sent_request = req
         self.sent_alias = customer_alias
+        self.sent_local_document_id = local_document_id
         return self._result
 
 
 def _approved_invoice() -> Invoice:
     invoice = Invoice(
-        id="LVS2026000000001",
+        id="INV-INTERNAL-1",  # iç id; resmi GİB numarasından farklı
         customer_company="ACME",
         currency=Currency.TRY,
         issue_date=date(2026, 6, 18),
@@ -63,6 +65,7 @@ def _command(customer: Party | None = None) -> IssueEInvoiceCommand:
     return IssueEInvoiceCommand(
         customer=customer or Party(tax_id="11111111111", name="Ahmet Yılmaz", city="İstanbul"),
         supplier=Party(tax_id="9000068418", name="LeanViser", tax_office="Beşiktaş"),
+        gib_number="LVS2026000000001",
         customer_alias="defaultpk",
     )
 
@@ -73,7 +76,7 @@ def test_maps_invoice_lines_and_parties():
     assert result.succeeded
     assert result.ettn == "ETTN-1"
     req = gateway.sent_request
-    assert req.number == "LVS2026000000001"
+    assert req.number == "LVS2026000000001"  # resmi GİB numarası -> cbc:ID
     assert req.supplier.tax_id == "9000068418"
     assert req.customer.tax_id == "11111111111"
     assert len(req.lines) == 1
@@ -81,6 +84,7 @@ def test_maps_invoice_lines_and_parties():
     assert req.lines[0].unit_price == Decimal("1000.00")
     assert req.lines[0].vat_rate == Decimal("0.10")
     assert gateway.sent_alias == "defaultpk"
+    assert gateway.sent_local_document_id == "INV-INTERNAL-1"  # iç fatura id
 
 
 def test_profile_is_earchive_for_unregistered_customer():
