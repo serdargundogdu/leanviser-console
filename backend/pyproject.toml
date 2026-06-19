@@ -5,6 +5,7 @@ description = "LeanViser CONSOLE — internal operations backend (finance route)
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
+    "psycopg[binary]>=3.3.4",
     "uvicorn[standard]>=0.32",
 ]
 
