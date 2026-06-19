@@ -7,6 +7,18 @@ name: Deploy · Cloud Run
 # Secret'lar tanımlı değilken deploy işi ATLANIR (workflow kırmızıya düşmez);
 # secret'lar girilince main push veya manuel tetikte gerçek deploy çalışır.
 # Backend, Dockerfile üzerinden kaynaktan (Cloud Build) derlenip dağıtılır.
+#
+# Opsiyonel prod wiring (tanımlı OLANLAR eklenir; yoksa varsayılanlarla çalışır):
+#   CLOUDSQL_INSTANCE  — Cloud SQL bağlantı adı (PROJECT:REGION:INSTANCE).
+#                        Tanımlıysa instance Cloud Run'a bağlanır ve DATABASE_URL,
+#                        Secret Manager'daki "DATABASE_URL" secret'ından alınır.
+#                        (Tanımsızsa: geçici SQLite — kalıcı DEĞİL.)
+#   UYUMSOFT_LIVE=true — canlı entegratör: UYUMSOFT_USERNAME/PASSWORD Secret
+#                        Manager'dan alınır, UYUMSOFT_ENV=live. (Tanımsızsa: test.)
+#   LEANVISER_VKN / NAME / TAX_OFFICE / CITY / DISTRICT / STREET / INVOICE_SERIES
+#                      — gönderici kimliği (tanımlı olanlar env olarak geçer).
+# Gerekli Secret Manager secret'ları: DATABASE_URL, UYUMSOFT_USERNAME,
+# UYUMSOFT_PASSWORD — SA'ya roles/secretmanager.secretAccessor verilmeli.
 
 on:
   push:
@@ -58,11 +70,60 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT }}
 
       - name: Deploy to Cloud Run (from source)
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          # Opsiyonel prod wiring (tanımlıysa eklenir; yoksa zarifçe atlanır):
+          CLOUDSQL_INSTANCE: ${{ secrets.CLOUDSQL_INSTANCE }}
+          UYUMSOFT_LIVE: ${{ secrets.UYUMSOFT_LIVE }}
+          LEANVISER_VKN: ${{ secrets.LEANVISER_VKN }}
+          LEANVISER_NAME: ${{ secrets.LEANVISER_NAME }}
+          LEANVISER_TAX_OFFICE: ${{ secrets.LEANVISER_TAX_OFFICE }}
+          LEANVISER_CITY: ${{ secrets.LEANVISER_CITY }}
+          LEANVISER_DISTRICT: ${{ secrets.LEANVISER_DISTRICT }}
+          LEANVISER_STREET: ${{ secrets.LEANVISER_STREET }}
+          LEANVISER_INVOICE_SERIES: ${{ secrets.LEANVISER_INVOICE_SERIES }}
         run: |
-          gcloud run deploy "${SERVICE}" \
-            --source backend \
-            --project "${{ secrets.GCP_PROJECT }}" \
-            --region "${{ secrets.GCP_REGION }}" \
-            --platform managed \
-            --allow-unauthenticated
+          set -euo pipefail
+          args=(run deploy "$SERVICE"
+            --source backend
+            --project "$GCP_PROJECT"
+            --region "$GCP_REGION"
+            --platform managed
+            --allow-unauthenticated)
+
+          run_secrets=()
+          run_envs=()
+
+          # Kalıcılık: Cloud SQL instance bağla + DATABASE_URL'i Secret Manager'dan al.
+          if [ -n "${CLOUDSQL_INSTANCE:-}" ]; then
+            args+=(--add-cloudsql-instances "$CLOUDSQL_INSTANCE")
+            run_secrets+=("DATABASE_URL=DATABASE_URL:latest")
+          fi
+
+          # Canlı entegratör: creds Secret Manager'dan, ortam=live.
+          if [ "${UYUMSOFT_LIVE:-}" = "true" ]; then
+            run_secrets+=("UYUMSOFT_USERNAME=UYUMSOFT_USERNAME:latest")
+            run_secrets+=("UYUMSOFT_PASSWORD=UYUMSOFT_PASSWORD:latest")
+            run_envs+=("UYUMSOFT_ENV=live")
+          fi
+
+          # Gönderici (LeanViser) kimliği — tanımlı olan alanlar env olarak geçer.
+          for key in LEANVISER_VKN LEANVISER_NAME LEANVISER_TAX_OFFICE \
+                     LEANVISER_CITY LEANVISER_DISTRICT LEANVISER_STREET \
+                     LEANVISER_INVOICE_SERIES; do
+            val="${!key:-}"
+            if [ -n "$val" ]; then
+              run_envs+=("$key=$val")
+            fi
+          done
+
+          if [ "${#run_secrets[@]}" -gt 0 ]; then
+            args+=(--set-secrets "$(IFS=,; echo "${run_secrets[*]}")")
+          fi
+          if [ "${#run_envs[@]}" -gt 0 ]; then
+            args+=(--set-env-vars "$(IFS=,; echo "${run_envs[*]}")")
+          fi
+
+          gcloud "${args[@]}"
           # Not: erişim kısıtlaması (allow-unauthenticated) sonraki turda gözden geçirilecek.
