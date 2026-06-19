@@ -305,6 +305,21 @@ def test_einvoice_pdf_after_issue():
     assert response.content.startswith(b"%PDF")
 
 
+def test_recipient_aliases_returns_list():
+    _fake_gateway.aliases = ("defaultpk", "urn:mail:x@y.com")
+    try:
+        body = client.get("/finance/recipient-aliases/9000068418").json()
+        assert body["vkn_tckn"] == "9000068418"
+        assert body["aliases"] == ["defaultpk", "urn:mail:x@y.com"]
+    finally:
+        _fake_gateway.aliases = ()
+
+
+def test_recipient_aliases_empty_for_unregistered():
+    body = client.get("/finance/recipient-aliases/11111111111").json()
+    assert body["aliases"] == []
+
+
 def test_einvoice_status_not_issued_returns_409():
     client.post("/finance/invoices", json=_expense_payload("INV-NOISSUE"))
     assert client.get("/finance/invoices/INV-NOISSUE/einvoice-status").status_code == 409

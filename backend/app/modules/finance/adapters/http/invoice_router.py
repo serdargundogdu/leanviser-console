@@ -114,6 +114,13 @@ class EInvoiceStatusResponse(BaseModel):
     logs: list[EInvoiceStatusLogOut]
 
 
+class RecipientAliasesResponse(BaseModel):
+    """Alıcının kayıtlı GİB etiketleri. Boşsa kayıtlı e-Fatura mükellefi değil (e-Arşiv)."""
+
+    vkn_tckn: str
+    aliases: list[str]
+
+
 class InvoiceLineOut(BaseModel):
     """Yanıt kalemi (tutarlar string). line_total nettir; vat_amount KDV tutarı."""
 
@@ -391,6 +398,19 @@ def einvoice_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{invoice_id}.pdf"'},
     )
+
+
+@router.get("/recipient-aliases/{vkn_tckn}", response_model=RecipientAliasesResponse)
+def recipient_aliases(
+    vkn_tckn: str,
+    gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
+) -> RecipientAliasesResponse:
+    """Alıcının kayıtlı GİB etiketlerini döndürür (kesim öncesi etiket seçimi için)."""
+    try:
+        aliases = gateway.get_recipient_aliases(vkn_tckn)
+    except EInvoiceGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RecipientAliasesResponse(vkn_tckn=vkn_tckn, aliases=list(aliases))
 
 
 @router.delete("/invoices/{invoice_id}", status_code=204)

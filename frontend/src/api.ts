@@ -79,6 +79,11 @@ export type EInvoiceStatusResponse = {
   logs: EInvoiceStatusLog[];
 };
 
+export type RecipientAliasesResponse = {
+  vkn_tckn: string;
+  aliases: string[];
+};
+
 export async function compileInvoice(
   request: CompileInvoiceRequest,
 ): Promise<InvoiceResponse> {
@@ -194,6 +199,23 @@ export async function getEInvoiceStatus(id: string): Promise<EInvoiceStatusRespo
 
 export function einvoicePdfUrl(id: string): string {
   return `/api/finance/invoices/${id}/einvoice-pdf`;
+}
+
+export async function getRecipientAliases(vkn: string): Promise<RecipientAliasesResponse> {
+  const response = await fetch(`/api/finance/recipient-aliases/${encodeURIComponent(vkn)}`);
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const data = JSON.parse(detail);
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // detail düz metin kalsın
+    }
+    throw new Error(`Hata ${response.status}: ${detail}`);
+  }
+  return (await response.json()) as RecipientAliasesResponse;
 }
 
 export async function getInvoiceSource(id: string): Promise<CompileInvoiceRequest> {

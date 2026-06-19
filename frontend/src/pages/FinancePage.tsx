@@ -6,6 +6,7 @@ import {
   einvoicePdfUrl,
   getEInvoiceStatus,
   getInvoiceSource,
+  getRecipientAliases,
   issueEInvoice,
   listInvoices,
   type EInvoiceStatusResponse,
@@ -69,6 +70,8 @@ export default function FinancePage() {
   const [issuingId, setIssuingId] = useState<string | null>(null);
   const [issueCustomer, setIssueCustomer] = useState<CustomerForm>(emptyCustomer);
   const [issuing, setIssuing] = useState(false);
+  const [aliasOptions, setAliasOptions] = useState<string[]>([]);
+  const [aliasFetched, setAliasFetched] = useState(false);
   const [statusInfo, setStatusInfo] = useState<EInvoiceStatusResponse | null>(null);
 
   function loadInvoices() {
@@ -149,12 +152,34 @@ export default function FinancePage() {
     setError(null);
     setNotice(null);
     setIssuingId(saved.id);
+    setAliasOptions([]);
+    setAliasFetched(false);
     // Unvan'ı kayıtlı müşteri firmadan ön-doldur; vergi kimliği elle girilir.
     setIssueCustomer({ ...emptyCustomer, name: saved.customer_company });
   }
 
   function updateCustomer(patch: Partial<CustomerForm>) {
+    // VKN/TCKN değişince getirilen etiketler bayatlar; sıfırla.
+    if (patch.taxId !== undefined) {
+      setAliasOptions([]);
+      setAliasFetched(false);
+    }
     setIssueCustomer((current) => ({ ...current, ...patch }));
+  }
+
+  async function handleFetchAliases() {
+    if (!issueCustomer.taxId) {
+      return;
+    }
+    setError(null);
+    try {
+      const result = await getRecipientAliases(issueCustomer.taxId);
+      setAliasOptions(result.aliases);
+      setAliasFetched(true);
+      updateCustomer({ alias: result.aliases[0] ?? "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function handleIssue(event: FormEvent) {
@@ -421,6 +446,9 @@ export default function FinancePage() {
             <label style={field}>
               <span style={labelText}>VKN / TCKN</span>
               <input value={issueCustomer.taxId} onChange={(e) => updateCustomer({ taxId: e.target.value })} />
+              <button type="button" onClick={handleFetchAliases} disabled={!issueCustomer.taxId}>
+                Etiketleri getir
+              </button>
             </label>
             <label style={field}>
               <span style={labelText}>Unvan / Ad Soyad</span>
@@ -444,11 +472,29 @@ export default function FinancePage() {
             </label>
             <label style={field}>
               <span style={labelText}>Alıcı etiketi</span>
-              <input
-                placeholder="Boş bırakın — kayıtlı alıcıda otomatik bulunur"
-                value={issueCustomer.alias}
-                onChange={(e) => updateCustomer({ alias: e.target.value })}
-              />
+              {aliasOptions.length > 0 ? (
+                <select
+                  value={issueCustomer.alias}
+                  onChange={(e) => updateCustomer({ alias: e.target.value })}
+                >
+                  {aliasOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  placeholder="Boş bırakın — kayıtlı alıcıda otomatik bulunur"
+                  value={issueCustomer.alias}
+                  onChange={(e) => updateCustomer({ alias: e.target.value })}
+                />
+              )}
+              {aliasFetched && aliasOptions.length === 0 && (
+                <span style={{ fontSize: 12, color: "#6b7280" }}>
+                  Kayıtlı e-Fatura mükellefi değil → e-Arşiv
+                </span>
+              )}
             </label>
             <button type="submit" disabled={issuing} style={{ padding: "8px 16px", fontWeight: 600, marginTop: 8 }}>
               {issuing ? "Kesiliyor…" : "Kes ve Gönder"}
