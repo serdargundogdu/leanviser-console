@@ -12,7 +12,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from app.modules.finance.application.einvoice_models import EInvoiceRequest, EInvoiceSendResult
+from app.modules.finance.application.einvoice_models import (
+    EInvoiceRequest,
+    EInvoiceSendResult,
+    EInvoiceStatus,
+)
 
 
 class EInvoiceGateway(Protocol):
@@ -38,4 +42,12 @@ class EInvoiceGateway(Protocol):
         İş kuralı reddini (IsSucceded=false) `succeeded=False` + mesaj olarak
         döndürür; taşıma/SOAP hatalarında istisna atar.
         """
+        ...
+
+    def get_invoice_status(self, invoice_id: str) -> EInvoiceStatus:
+        """Kesilmiş faturanın (ETTN) güncel durumunu + işleme günlüklerini döndürür."""
+        ...
+
+    def get_invoice_pdf(self, invoice_id: str) -> bytes:
+        """Kesilmiş faturanın (ETTN) PDF'ini ham bytes olarak döndürür."""
         ...

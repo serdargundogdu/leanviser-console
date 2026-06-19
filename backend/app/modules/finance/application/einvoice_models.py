@@ -8,7 +8,7 @@ Saf VO'lar; framework-süz, Decimal (float yok).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -87,3 +87,28 @@ class EInvoiceSendResult:
     message: str = ""
     invoice_id: str | None = None  # entegratörün döndürdüğü belge kimliği
     ettn: str | None = None  # ETTN (UUID)
+
+
+@dataclass(frozen=True)
+class EInvoiceStatusLog:
+    """Faturanın entegratör/GİB işleme günlüğü satırı."""
+
+    created_at: datetime
+    message: str
+    type: int  # entegratör log türü (ör. 2=bilgi, 6=hata)
+
+
+@dataclass(frozen=True)
+class EInvoiceStatus:
+    """Kesilmiş faturanın güncel durumu + işleme günlükleri.
+
+    SendInvoice'ın IsSucceded=true dönmesi yalnız kuyruğa kabulü gösterir; GİB
+    şema/asenkron kontrolünün sonucu (ör. 'Error') burada görünür.
+    """
+
+    invoice_id: str  # entegratör belge kimliği (ETTN)
+    local_document_id: str  # bizim fatura no
+    status: str  # entegratör durumu (ör. Succeed / Error / Waiting)
+    status_code: int
+    message: str
+    logs: tuple[EInvoiceStatusLog, ...] = ()

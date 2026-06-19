@@ -7,11 +7,11 @@ olarak kullanılmaz — Pydantic alan tiplerini kuruluşta gerçek tip olarak is
 """
 
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.modules.finance.adapters.http.dependencies import (
@@ -91,6 +91,25 @@ class IssueEInvoiceRequest(BaseModel):
 
     customer: CustomerPartyIn
     customer_alias: str | None = None  # e-Fatura alıcı etiketi (GİB); e-Arşiv'de boş
+
+
+class EInvoiceStatusLogOut(BaseModel):
+    """Durum sorgusu günlük satırı."""
+
+    created_at: datetime
+    type: int
+    message: str
+
+
+class EInvoiceStatusResponse(BaseModel):
+    """Kesilmiş faturanın entegratör/GİB durumu + günlükleri."""
+
+    invoice_id: str
+    local_document_id: str
+    status: str
+    status_code: int
+    message: str
+    logs: list[EInvoiceStatusLogOut]
 
 
 class InvoiceLineOut(BaseModel):
@@ -298,6 +317,59 @@ def issue_einvoice(
     invoice.send(ettn=result.ettn)
     repository.save(invoice)
     return _to_response(invoice)
+
+
+def _require_issued(invoice_id: str, repository: InvoiceRepository) -> Invoice:
+    invoice = repository.get(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
+    if not invoice.ettn:
+        raise HTTPException(status_code=409, detail="Bu fatura henüz e-Fatura olarak kesilmedi")
+    return invoice
+
+
+@router.get("/invoices/{invoice_id}/einvoice-status", response_model=EInvoiceStatusResponse)
+def einvoice_status(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+    gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
+) -> EInvoiceStatusResponse:
+    """Kesilmiş faturanın entegratör/GİB durumunu + işleme günlüklerini döndürür."""
+    invoice = _require_issued(invoice_id, repository)
+    try:
+        status = gateway.get_invoice_status(invoice.ettn)
+    except EInvoiceGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return EInvoiceStatusResponse(
+        invoice_id=status.invoice_id,
+        local_document_id=status.local_document_id,
+        status=status.status,
+        status_code=status.status_code,
+        message=status.message,
+        logs=[
+            EInvoiceStatusLogOut(created_at=log.created_at, type=log.type, message=log.message)
+            for log in status.logs
+        ],
+    )
+
+
+@router.get("/invoices/{invoice_id}/einvoice-pdf")
+def einvoice_pdf(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+    gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
+) -> Response:
+    """Kesilmiş faturanın PDF'ini döndürür (application/pdf)."""
+    invoice = _require_issued(invoice_id, repository)
+    try:
+        pdf = gateway.get_invoice_pdf(invoice.ettn)
+    except EInvoiceGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{invoice_id}.pdf"'},
+    )
 
 
 @router.delete("/invoices/{invoice_id}", status_code=204)

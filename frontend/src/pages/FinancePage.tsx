@@ -3,9 +3,12 @@ import {
   approveInvoice,
   compileInvoice,
   deleteInvoice,
+  einvoicePdfUrl,
+  getEInvoiceStatus,
   getInvoiceSource,
   issueEInvoice,
   listInvoices,
+  type EInvoiceStatusResponse,
   type InvoiceResponse,
 } from "../api";
 import { formatDate, formatMoney, statusColor, statusLabel } from "../format";
@@ -66,6 +69,7 @@ export default function FinancePage() {
   const [issuingId, setIssuingId] = useState<string | null>(null);
   const [issueCustomer, setIssueCustomer] = useState<CustomerForm>(emptyCustomer);
   const [issuing, setIssuing] = useState(false);
+  const [statusInfo, setStatusInfo] = useState<EInvoiceStatusResponse | null>(null);
 
   function loadInvoices() {
     listInvoices()
@@ -180,6 +184,17 @@ export default function FinancePage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIssuing(false);
+    }
+  }
+
+  async function handleStatus(id: string) {
+    setError(null);
+    setNotice(null);
+    setStatusInfo(null);
+    try {
+      setStatusInfo(await getEInvoiceStatus(id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -443,6 +458,31 @@ export default function FinancePage() {
         </section>
       )}
 
+      {statusInfo && (
+        <section style={{ marginTop: "1.5rem", border: "1px solid #d1d5db", borderRadius: 6, padding: "1rem" }}>
+          <h3 style={{ marginTop: 0 }}>
+            e-Fatura Durumu — {statusInfo.local_document_id} ·{" "}
+            <span style={{ color: statusInfo.status === "Error" ? "crimson" : "#047857" }}>
+              {statusInfo.status}
+            </span>
+          </h3>
+          {statusInfo.message && <p style={{ marginTop: 0 }}>{statusInfo.message}</p>}
+          <ul style={{ fontSize: 13, color: "#374151", paddingLeft: 18 }}>
+            {statusInfo.logs.map((log, index) => (
+              <li key={index}>
+                <span style={{ color: "#6b7280" }}>
+                  {new Date(log.created_at).toLocaleString("tr-TR")}
+                </span>{" "}
+                — {log.message}
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() => setStatusInfo(null)}>
+            Kapat
+          </button>
+        </section>
+      )}
+
       {invoices.length > 0 && (
         <section style={{ marginTop: "2rem" }}>
           <h3>Kayıtlı Faturalar ({invoices.length})</h3>
@@ -480,6 +520,14 @@ export default function FinancePage() {
                     )}
                     {saved.status === "Approved" && (
                       <button onClick={() => startIssue(saved)}>e-Fatura Kes</button>
+                    )}
+                    {saved.status === "Sent" && saved.ettn && (
+                      <>
+                        <button onClick={() => handleStatus(saved.id)}>Durum</button>{" "}
+                        <a href={einvoicePdfUrl(saved.id)} target="_blank" rel="noreferrer">
+                          PDF
+                        </a>
+                      </>
                     )}
                   </td>
                 </tr>

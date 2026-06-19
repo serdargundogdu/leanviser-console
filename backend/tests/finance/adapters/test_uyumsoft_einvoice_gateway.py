@@ -74,7 +74,15 @@ def test_send_invoice_earchive_succeeds():
             ),
         ),
     )
-    result = _gateway().send_invoice(req, local_document_id=number)
+    gateway = _gateway()
+    result = gateway.send_invoice(req, local_document_id=number)
     assert result.succeeded, result.message
     assert result.invoice_id == number
     assert result.ettn
+
+    # Kesilen faturanın durumu ve PDF'i ETTN ile sorgulanabilmeli.
+    status = gateway.get_invoice_status(result.ettn)
+    assert status.invoice_id == result.ettn
+    assert status.local_document_id == number
+    pdf = gateway.get_invoice_pdf(result.ettn)
+    assert pdf.startswith(b"%PDF")

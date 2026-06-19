@@ -63,6 +63,21 @@ export type IssueEInvoiceRequest = {
   customer_alias?: string | null;
 };
 
+export type EInvoiceStatusLog = {
+  created_at: string;
+  type: number;
+  message: string;
+};
+
+export type EInvoiceStatusResponse = {
+  invoice_id: string;
+  local_document_id: string;
+  status: string;
+  status_code: number;
+  message: string;
+  logs: EInvoiceStatusLog[];
+};
+
 export async function compileInvoice(
   request: CompileInvoiceRequest,
 ): Promise<InvoiceResponse> {
@@ -157,6 +172,27 @@ export async function issueEInvoice(
     throw new Error(`Hata ${response.status}: ${detail}`);
   }
   return (await response.json()) as InvoiceResponse;
+}
+
+export async function getEInvoiceStatus(id: string): Promise<EInvoiceStatusResponse> {
+  const response = await fetch(`/api/finance/invoices/${id}/einvoice-status`);
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const data = JSON.parse(detail);
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // detail düz metin kalsın
+    }
+    throw new Error(`Hata ${response.status}: ${detail}`);
+  }
+  return (await response.json()) as EInvoiceStatusResponse;
+}
+
+export function einvoicePdfUrl(id: string): string {
+  return `/api/finance/invoices/${id}/einvoice-pdf`;
 }
 
 export async function getInvoiceSource(id: string): Promise<CompileInvoiceRequest> {

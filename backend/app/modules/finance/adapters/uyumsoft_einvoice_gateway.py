@@ -25,7 +25,12 @@ from zeep.wsse.username import UsernameToken
 
 from app.modules.finance.adapters.ubl_tr import populate_invoice
 from app.modules.finance.application.einvoice_gateway import EInvoiceGateway
-from app.modules.finance.application.einvoice_models import EInvoiceRequest, EInvoiceSendResult
+from app.modules.finance.application.einvoice_models import (
+    EInvoiceRequest,
+    EInvoiceSendResult,
+    EInvoiceStatus,
+    EInvoiceStatusLog,
+)
 
 # Test ortamı (CAPTCHA'sız; herkese açık test creds: Uyumsoft/Uyumsoft).
 TEST_WSDL_URL = "https://efatura-test.uyumsoft.com.tr/services/Integration?singleWsdl"
@@ -112,6 +117,36 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
             self._endpoint, data=envelope, headers=headers, timeout=self._timeout
         )
         return self._parse_send_result(response.content)
+
+    def get_invoice_status(self, invoice_id: str) -> EInvoiceStatus:
+        # ArrayOfString tipini açıkça kurmak gerekir; düz liste boş gönderiliyor.
+        array_of_string = self._client.get_type("ns0:ArrayOfString")
+        value = self._value(
+            self._client.service.GetOutboxInvoiceStatusWithLogs(array_of_string([invoice_id]))
+        )
+        if not value:
+            raise EInvoiceGatewayError(f"Durum bilgisi bulunamadı: {invoice_id}")
+        info = value[0]
+        return EInvoiceStatus(
+            invoice_id=info.InvoiceId or invoice_id,
+            local_document_id=info.LocalDocumentId or "",
+            status=str(info.Status) if info.Status is not None else "",
+            status_code=info.StatusCode or 0,
+            message=info.Message or "",
+            logs=tuple(
+                EInvoiceStatusLog(
+                    created_at=log.CreateDateUtc, message=log.Message or "", type=log.Type or 0
+                )
+                for log in (info.Logs or [])
+            ),
+        )
+
+    def get_invoice_pdf(self, invoice_id: str) -> bytes:
+        value = self._value(self._client.service.GetOutboxInvoicePdf(invoice_id))
+        data = getattr(value, "Data", None)
+        if not data:
+            raise EInvoiceGatewayError(f"PDF bulunamadı: {invoice_id}")
+        return data  # zeep base64Binary'yi zaten bytes'a çözer
 
     @staticmethod
     def _resolve_alias(req: EInvoiceRequest, customer_alias: str | None) -> str:

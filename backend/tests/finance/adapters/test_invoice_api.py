@@ -1,6 +1,6 @@
 """Finance HTTP uç noktası testleri (FastAPI TestClient; sabit-kur dependency override)."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -13,7 +13,12 @@ from app.modules.finance.adapters.http.dependencies import (
     get_invoice_repository,
 )
 from app.modules.finance.adapters.sqlite_invoice_repository import SqliteInvoiceRepository
-from app.modules.finance.application.einvoice_models import EInvoiceSendResult, Party
+from app.modules.finance.application.einvoice_models import (
+    EInvoiceSendResult,
+    EInvoiceStatus,
+    EInvoiceStatusLog,
+    Party,
+)
 from app.modules.finance.domain.fx import ExchangeRate
 from app.modules.finance.domain.money import Currency
 
@@ -37,6 +42,23 @@ class _FakeEInvoiceGateway:
 
     def send_invoice(self, req, *, customer_alias=None, local_document_id=None):
         return self.result
+
+    def get_invoice_status(self, invoice_id: str) -> EInvoiceStatus:
+        return EInvoiceStatus(
+            invoice_id=invoice_id,  # ETTN ile sorgulandığını doğrular
+            local_document_id="DOC",
+            status="Succeed",
+            status_code=1,
+            message="",
+            logs=(
+                EInvoiceStatusLog(
+                    created_at=datetime(2026, 6, 19, 10, 0), message="işlendi", type=2
+                ),
+            ),
+        )
+
+    def get_invoice_pdf(self, invoice_id: str) -> bytes:
+        return b"%PDF-1.4 fake"
 
 
 app.dependency_overrides[get_exchange_rate_provider] = _StubRates
@@ -222,6 +244,41 @@ def test_issue_business_failure_returns_422_and_keeps_approved():
     assert response.status_code == 422
     assert "alıcı" in response.json()["detail"]
     assert client.get("/finance/invoices/INV-ISSUE-F").json()["status"] == "Approved"
+
+
+def _issue(invoice_id: str, ettn: str) -> None:
+    client.post("/finance/invoices", json=_expense_payload(invoice_id))
+    client.post(f"/finance/invoices/{invoice_id}/approve")
+    _fake_gateway.result = EInvoiceSendResult(succeeded=True, invoice_id=invoice_id, ettn=ettn)
+    client.post(
+        f"/finance/invoices/{invoice_id}/issue",
+        json={"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}},
+    )
+
+
+def test_einvoice_status_after_issue():
+    _issue("INV-ST", "ETTN-ST")
+    response = client.get("/finance/invoices/INV-ST/einvoice-status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["invoice_id"] == "ETTN-ST"  # ETTN ile sorgulanır
+    assert body["status"] == "Succeed"
+    assert len(body["logs"]) == 1
+    assert body["logs"][0]["message"] == "işlendi"
+
+
+def test_einvoice_pdf_after_issue():
+    _issue("INV-PDF", "ETTN-PDF")
+    response = client.get("/finance/invoices/INV-PDF/einvoice-pdf")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
+def test_einvoice_status_not_issued_returns_409():
+    client.post("/finance/invoices", json=_expense_payload("INV-NOISSUE"))
+    assert client.get("/finance/invoices/INV-NOISSUE/einvoice-status").status_code == 409
+    assert client.get("/finance/invoices/INV-NOISSUE/einvoice-pdf").status_code == 409
 
 
 def test_send_before_approve_returns_409():
