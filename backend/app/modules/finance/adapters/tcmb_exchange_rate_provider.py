@@ -13,7 +13,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from xml.etree import ElementTree as ET
 
@@ -23,6 +23,8 @@ from app.modules.finance.domain.money import Currency
 
 _TCMB_BASE_URL = "https://www.tcmb.gov.tr/kurlar"
 _DEFAULT_TIMEOUT_SECONDS = 10
+# İstenen tarihte veri yoksa en fazla bu kadar gün geriye (önceki iş günü) bakılır.
+_DEFAULT_MAX_LOOKBACK_DAYS = 10
 
 # HTTP taşıma sözleşmesi: bir URL'i ham byte içeriğe çevirir (enjekte edilebilir).
 XmlFetcher = Callable[[str], bytes]
@@ -79,8 +81,13 @@ class TcmbExchangeRateProvider(ExchangeRateProvider):
     Yalnız TRY karşısı kur desteklenir (TCMB kurları TRY bazlıdır).
     """
 
-    def __init__(self, fetch: XmlFetcher | None = None) -> None:
+    def __init__(
+        self,
+        fetch: XmlFetcher | None = None,
+        max_lookback_days: int = _DEFAULT_MAX_LOOKBACK_DAYS,
+    ) -> None:
         self._fetch = fetch if fetch is not None else _urllib_fetch
+        self._max_lookback_days = max_lookback_days
 
     def get_rate(self, base: Currency, quote: Currency, as_of: date) -> ExchangeRate:
         if quote is not Currency.TRY:
@@ -90,6 +97,18 @@ class TcmbExchangeRateProvider(ExchangeRateProvider):
         if base is Currency.TRY:
             raise ExchangeRateUnavailableError("base TRY olamaz (dönüşüm gereksiz)")
 
-        xml_bytes = self._fetch(tcmb_url_for(as_of))
-        rate = parse_tcmb_forex_buying(xml_bytes, base)
-        return ExchangeRate(base=base, rate=rate, as_of=as_of, quote=quote)
+        # İstenen tarih için veri yoksa (hafta sonu/tatil/henüz yayınlanmamış) en
+        # yakın önceki güne iner; dönen ExchangeRate.as_of gerçek kur tarihidir.
+        for offset in range(self._max_lookback_days + 1):
+            day = as_of - timedelta(days=offset)
+            try:
+                xml_bytes = self._fetch(tcmb_url_for(day))
+            except ExchangeRateUnavailableError:
+                continue
+            rate = parse_tcmb_forex_buying(xml_bytes, base)
+            return ExchangeRate(base=base, rate=rate, as_of=day, quote=quote)
+
+        raise ExchangeRateUnavailableError(
+            f"{base.code}: {as_of} tarihinden geriye {self._max_lookback_days} "
+            "günde TCMB kuru bulunamadı"
+        )

@@ -86,3 +86,26 @@ def test_malformed_xml_raises():
     provider, _ = _provider_with(b"not-an-xml-payload")
     with pytest.raises(ExchangeRateUnavailableError):
         provider.get_rate(Currency.EUR, Currency.TRY, AS_OF)
+
+
+def test_falls_back_to_previous_day_when_date_missing():
+    available = tcmb_url_for(date(2026, 6, 18))
+
+    def fetch(url: str) -> bytes:
+        if url == available:
+            return SAMPLE_XML
+        raise ExchangeRateUnavailableError(f"veri yok: {url}")
+
+    provider = TcmbExchangeRateProvider(fetch=fetch)
+    result = provider.get_rate(Currency.EUR, Currency.TRY, date(2026, 6, 19))
+    assert result.as_of == date(2026, 6, 18)
+    assert result.rate == Decimal("47.7841")
+
+
+def test_gives_up_after_lookback_window():
+    def fetch(url: str) -> bytes:
+        raise ExchangeRateUnavailableError(f"hep 404: {url}")
+
+    provider = TcmbExchangeRateProvider(fetch=fetch, max_lookback_days=3)
+    with pytest.raises(ExchangeRateUnavailableError):
+        provider.get_rate(Currency.EUR, Currency.TRY, date(2026, 6, 19))
