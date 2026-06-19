@@ -6,14 +6,21 @@ import {
   sendInvoice,
   type InvoiceResponse,
 } from "../api";
+import { formatDate, formatMoney, statusColor, statusLabel } from "../format";
 
 const CURRENCIES = ["EUR", "USD", "TRY"];
 const EXPENSE_TYPES = ["Fuel", "Meal", "Parking", "Toll", "FlightTicket", "Other"];
 const VAT_RATES = ["0.00", "0.01", "0.10", "0.20"];
 
-const field: CSSProperties = { display: "block", marginBottom: 8 };
-const leftCell: CSSProperties = { textAlign: "left", padding: "4px 8px", borderBottom: "1px solid #eee" };
-const rightCell: CSSProperties = { textAlign: "right", padding: "4px 8px", borderBottom: "1px solid #eee" };
+const field: CSSProperties = { display: "flex", gap: 12, alignItems: "center", marginBottom: 8 };
+const labelText: CSSProperties = { minWidth: 130, color: "#374151" };
+const control: CSSProperties = { padding: "4px 6px", flex: 1, maxWidth: 280 };
+const leftCell: CSSProperties = { textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #eee" };
+const rightCell: CSSProperties = { textAlign: "right", padding: "6px 8px", borderBottom: "1px solid #eee" };
+
+function StatusBadge({ status }: { status: string }) {
+  return <span style={{ color: statusColor(status), fontWeight: 600 }}>{statusLabel(status)}</span>;
+}
 
 export default function FinancePage() {
   const [customer, setCustomer] = useState("ACME");
@@ -75,7 +82,7 @@ export default function FinancePage() {
   }
 
   return (
-    <main style={{ maxWidth: 760, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui, sans-serif" }}>
+    <main style={{ maxWidth: 820, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui, sans-serif", color: "#111827" }}>
       <h1>LeanViser CONSOLE</h1>
       <h2>Finans — Fatura Derleme</h2>
 
@@ -83,28 +90,28 @@ export default function FinancePage() {
         <fieldset>
           <legend>Fatura</legend>
           <label style={field}>
-            Müşteri firma
-            <input value={customer} onChange={(e) => setCustomer(e.target.value)} />
+            <span style={labelText}>Müşteri firma</span>
+            <input style={control} value={customer} onChange={(e) => setCustomer(e.target.value)} />
           </label>
           <label style={field}>
-            Fatura tarihi
-            <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            <span style={labelText}>Fatura tarihi</span>
+            <input style={control} type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
           </label>
         </fieldset>
 
         <fieldset>
           <legend>Hizmet kalemi</legend>
           <label style={field}>
-            Açıklama
-            <input value={svcDesc} onChange={(e) => setSvcDesc(e.target.value)} />
+            <span style={labelText}>Açıklama</span>
+            <input style={control} value={svcDesc} onChange={(e) => setSvcDesc(e.target.value)} />
           </label>
           <label style={field}>
-            Günlük ücret
-            <input value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} />
+            <span style={labelText}>Günlük ücret</span>
+            <input style={control} value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} />
           </label>
           <label style={field}>
-            Para birimi
-            <select value={svcCurrency} onChange={(e) => setSvcCurrency(e.target.value)}>
+            <span style={labelText}>Para birimi</span>
+            <select style={control} value={svcCurrency} onChange={(e) => setSvcCurrency(e.target.value)}>
               {CURRENCIES.map((code) => (
                 <option key={code} value={code}>
                   {code}
@@ -113,16 +120,16 @@ export default function FinancePage() {
             </select>
           </label>
           <label style={field}>
-            Gün sayısı
-            <input value={days} onChange={(e) => setDays(e.target.value)} />
+            <span style={labelText}>Gün sayısı</span>
+            <input style={control} value={days} onChange={(e) => setDays(e.target.value)} />
           </label>
         </fieldset>
 
         <fieldset>
           <legend>Masraf (TRY)</legend>
           <label style={field}>
-            Tür
-            <select value={expType} onChange={(e) => setExpType(e.target.value)}>
+            <span style={labelText}>Tür</span>
+            <select style={control} value={expType} onChange={(e) => setExpType(e.target.value)}>
               {EXPENSE_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {type}
@@ -131,12 +138,12 @@ export default function FinancePage() {
             </select>
           </label>
           <label style={field}>
-            Brüt (KDV dahil)
-            <input value={expGross} onChange={(e) => setExpGross(e.target.value)} />
+            <span style={labelText}>Brüt (KDV dahil)</span>
+            <input style={control} value={expGross} onChange={(e) => setExpGross(e.target.value)} />
           </label>
           <label style={field}>
-            KDV oranı
-            <select value={expVat} onChange={(e) => setExpVat(e.target.value)}>
+            <span style={labelText}>KDV oranı</span>
+            <select style={control} value={expVat} onChange={(e) => setExpVat(e.target.value)}>
               {VAT_RATES.map((rate) => (
                 <option key={rate} value={rate}>
                   {rate}
@@ -146,7 +153,7 @@ export default function FinancePage() {
           </label>
         </fieldset>
 
-        <button type="submit" disabled={loading}>
+        <button type="submit" disabled={loading} style={{ padding: "8px 16px", fontWeight: 600 }}>
           {loading ? "Derleniyor…" : "Fatura Derle"}
         </button>
       </form>
@@ -156,8 +163,8 @@ export default function FinancePage() {
       {invoice && (
         <section style={{ marginTop: "1.5rem" }}>
           <p>
-            <strong>Fatura {invoice.id}</strong> — {invoice.customer_company} · Durum: {invoice.status} ·{" "}
-            {invoice.issue_date}
+            <strong>Fatura {invoice.id}</strong> — {invoice.customer_company} · Durum:{" "}
+            <StatusBadge status={invoice.status} /> · {formatDate(invoice.issue_date)}
           </p>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -165,16 +172,16 @@ export default function FinancePage() {
                 <th style={leftCell}>Açıklama</th>
                 <th style={rightCell}>Birim</th>
                 <th style={rightCell}>Miktar</th>
-                <th style={rightCell}>Tutar ({invoice.currency})</th>
+                <th style={rightCell}>Tutar</th>
               </tr>
             </thead>
             <tbody>
               {invoice.lines.map((line, index) => (
                 <tr key={index}>
                   <td style={leftCell}>{line.description}</td>
-                  <td style={rightCell}>{line.unit_price}</td>
+                  <td style={rightCell}>{formatMoney(line.unit_price, invoice.currency)}</td>
                   <td style={rightCell}>{line.quantity}</td>
-                  <td style={rightCell}>{line.line_total}</td>
+                  <td style={rightCell}>{formatMoney(line.line_total, invoice.currency)}</td>
                 </tr>
               ))}
             </tbody>
@@ -184,9 +191,7 @@ export default function FinancePage() {
                   <strong>Toplam</strong>
                 </td>
                 <td style={rightCell}>
-                  <strong>
-                    {invoice.total} {invoice.currency}
-                  </strong>
+                  <strong>{formatMoney(invoice.total, invoice.currency)}</strong>
                 </td>
               </tr>
             </tfoot>
@@ -201,6 +206,7 @@ export default function FinancePage() {
             <thead>
               <tr>
                 <th style={leftCell}>No</th>
+                <th style={leftCell}>Tarih</th>
                 <th style={leftCell}>Müşteri</th>
                 <th style={leftCell}>Durum</th>
                 <th style={rightCell}>Toplam</th>
@@ -211,11 +217,12 @@ export default function FinancePage() {
               {invoices.map((saved) => (
                 <tr key={saved.id}>
                   <td style={leftCell}>{saved.id}</td>
+                  <td style={leftCell}>{formatDate(saved.issue_date)}</td>
                   <td style={leftCell}>{saved.customer_company}</td>
-                  <td style={leftCell}>{saved.status}</td>
-                  <td style={rightCell}>
-                    {saved.total} {saved.currency}
+                  <td style={leftCell}>
+                    <StatusBadge status={saved.status} />
                   </td>
+                  <td style={rightCell}>{formatMoney(saved.total, saved.currency)}</td>
                   <td style={leftCell}>
                     {saved.status === "Draft" && (
                       <button onClick={() => runTransition(approveInvoice, saved.id)}>Onayla</button>
@@ -223,7 +230,6 @@ export default function FinancePage() {
                     {saved.status === "Approved" && (
                       <button onClick={() => runTransition(sendInvoice, saved.id)}>Gönder</button>
                     )}
-                    {saved.status === "Sent" && <span>Gönderildi</span>}
                   </td>
                 </tr>
               ))}
