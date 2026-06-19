@@ -25,3 +25,7 @@ class InvoiceRepository(Protocol):
     def list_all(self) -> list[Invoice]:
         """Tüm kayıtlı faturaları döndürür."""
         ...
+
+    def delete(self, invoice_id: str) -> None:
+        """Faturayı siler; yoksa sessiz geçer."""
+        ...

@@ -49,3 +49,7 @@ class PostgresInvoiceRepository(InvoiceRepository):
         with psycopg.connect(self._dsn) as connection:
             rows = connection.execute("SELECT data FROM invoices ORDER BY id").fetchall()
         return [invoice_from_dict(row[0]) for row in rows]
+
+    def delete(self, invoice_id: str) -> None:
+        with psycopg.connect(self._dsn) as connection:
+            connection.execute("DELETE FROM invoices WHERE id = %s", (invoice_id,))

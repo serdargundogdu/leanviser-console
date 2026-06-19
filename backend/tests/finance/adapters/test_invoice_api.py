@@ -147,3 +147,20 @@ def test_send_before_approve_returns_409():
 
 def test_transition_unknown_invoice_returns_404():
     assert client.post("/finance/invoices/NOPE/approve").status_code == 404
+
+
+def test_delete_draft_invoice():
+    client.post("/finance/invoices", json=_expense_payload("INV-DEL"))
+    deleted = client.delete("/finance/invoices/INV-DEL")
+    assert deleted.status_code == 204
+    assert client.get("/finance/invoices/INV-DEL").status_code == 404
+
+
+def test_delete_non_draft_returns_409():
+    client.post("/finance/invoices", json=_expense_payload("INV-DEL2"))
+    client.post("/finance/invoices/INV-DEL2/approve")
+    assert client.delete("/finance/invoices/INV-DEL2").status_code == 409
+
+
+def test_delete_unknown_returns_404():
+    assert client.delete("/finance/invoices/NOPE").status_code == 404

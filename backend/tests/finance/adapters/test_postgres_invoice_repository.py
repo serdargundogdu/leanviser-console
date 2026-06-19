@@ -50,3 +50,10 @@ def test_save_get_list_roundtrip():
 def test_get_missing_returns_none():
     repo = PostgresInvoiceRepository(_DSN)
     assert repo.get("INV-PG-MISSING") is None
+
+
+def test_delete_removes_invoice():
+    repo = PostgresInvoiceRepository(_DSN)
+    repo.save(_invoice("INV-PG-DEL"))
+    repo.delete("INV-PG-DEL")
+    assert repo.get("INV-PG-DEL") is None

@@ -67,3 +67,10 @@ def test_list_all_returns_saved_invoices():
     invoices = repo.list_all()
     assert len(invoices) == 1
     assert invoices[0].id == "INV-1"
+
+
+def test_delete_removes_invoice():
+    repo = SqliteInvoiceRepository(":memory:")
+    repo.save(_invoice())
+    repo.delete("INV-1")
+    assert repo.get("INV-1") is None

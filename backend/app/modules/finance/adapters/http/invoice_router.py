@@ -26,7 +26,7 @@ from app.modules.finance.application.compile_invoice import (
 from app.modules.finance.application.exchange_rate_provider import ExchangeRateProvider
 from app.modules.finance.application.invoice_repository import InvoiceRepository
 from app.modules.finance.domain.expense import Expense, ExpenseType
-from app.modules.finance.domain.invoice import Invoice, InvoiceStateError
+from app.modules.finance.domain.invoice import Invoice, InvoiceStateError, InvoiceStatus
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
 from app.modules.finance.domain.vat import VatRate
 
@@ -215,3 +215,17 @@ def send_invoice(
 ) -> InvoiceResponse:
     """Onaylı faturayı gönderir (Approved -> Sent)."""
     return _transition(invoice_id, repository, lambda invoice: invoice.send())
+
+
+@router.delete("/invoices/{invoice_id}", status_code=204)
+def delete_invoice(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+) -> None:
+    """Taslak faturayı siler. Yoksa 404; Draft değilse 409 (commit'li kayıt)."""
+    invoice = repository.get(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
+    if invoice.status is not InvoiceStatus.Draft:
+        raise HTTPException(status_code=409, detail="Yalnız taslak fatura silinebilir")
+    repository.delete(invoice_id)

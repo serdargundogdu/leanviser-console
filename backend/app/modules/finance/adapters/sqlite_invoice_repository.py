@@ -53,3 +53,8 @@ class SqliteInvoiceRepository(InvoiceRepository):
         with self._lock:
             rows = self._connection.execute("SELECT data FROM invoices ORDER BY id").fetchall()
         return [invoice_from_dict(json.loads(row[0])) for row in rows]
+
+    def delete(self, invoice_id: str) -> None:
+        with self._lock:
+            self._connection.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
+            self._connection.commit()
