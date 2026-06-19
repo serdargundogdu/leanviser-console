@@ -70,6 +70,26 @@ class Invoice:
         self._status = InvoiceStatus.Draft
         self._lines: list[InvoiceLine] = []
 
+    @classmethod
+    def reconstitute(
+        cls,
+        id: str,
+        customer_company: str,
+        currency: Currency,
+        issue_date: date,
+        status: InvoiceStatus,
+        lines: list[InvoiceLine],
+    ) -> Invoice:
+        """Kalıcılıktan yeniden kurar; durum/kalemleri doğrudan yükler.
+
+        Durum makinesi invariant'larını bilinçli olarak atlar — yalnız repository
+        rehydration içindir, iş akışında kullanılmaz.
+        """
+        invoice = cls(id, customer_company, currency, issue_date)
+        invoice._status = status
+        invoice._lines = list(lines)
+        return invoice
+
     @property
     def status(self) -> InvoiceStatus:
         return self._status

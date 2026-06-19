@@ -150,3 +150,18 @@ def test_identity_based_equality():
         issue_date=date(2026, 6, 19),
     )
     assert a != c
+
+
+def test_reconstitute_restores_state_without_transitions():
+    line = InvoiceLine(description="Hizmet", unit_price=_try("100.00"), quantity=Decimal("2"))
+    invoice = Invoice.reconstitute(
+        id="INV-9",
+        customer_company="ACME",
+        currency=Currency.TRY,
+        issue_date=date(2026, 6, 19),
+        status=InvoiceStatus.Sent,
+        lines=[line],
+    )
+    assert invoice.status is InvoiceStatus.Sent
+    assert invoice.total() == _try("200.00")
+    assert len(invoice.lines) == 1
