@@ -27,5 +27,13 @@ class InvoiceRepository(Protocol):
         ...
 
     def delete(self, invoice_id: str) -> None:
-        """Faturayı siler; yoksa sessiz geçer."""
+        """Faturayı (ve varsa kaynak girdilerini) siler; yoksa sessiz geçer."""
+        ...
+
+    def save_source(self, invoice_id: str, source: dict) -> None:
+        """Faturanın kaynak girdilerini (derleme isteği) saklar; varsa üzerine yazar."""
+        ...
+
+    def get_source(self, invoice_id: str) -> dict | None:
+        """Faturanın kaynak girdilerini döndürür; yoksa None."""
         ...

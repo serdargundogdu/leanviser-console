@@ -57,3 +57,9 @@ def test_delete_removes_invoice():
     repo.save(_invoice("INV-PG-DEL"))
     repo.delete("INV-PG-DEL")
     assert repo.get("INV-PG-DEL") is None
+
+
+def test_source_roundtrip():
+    repo = PostgresInvoiceRepository(_DSN)
+    repo.save_source("INV-PG-SRC", {"invoice_id": "INV-PG-SRC", "service_items": []})
+    assert repo.get_source("INV-PG-SRC") == {"invoice_id": "INV-PG-SRC", "service_items": []}

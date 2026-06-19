@@ -74,3 +74,18 @@ def test_delete_removes_invoice():
     repo.save(_invoice())
     repo.delete("INV-1")
     assert repo.get("INV-1") is None
+
+
+def test_source_save_get_roundtrip():
+    repo = SqliteInvoiceRepository(":memory:")
+    assert repo.get_source("INV-1") is None
+    repo.save_source("INV-1", {"invoice_id": "INV-1", "service_items": []})
+    assert repo.get_source("INV-1") == {"invoice_id": "INV-1", "service_items": []}
+
+
+def test_delete_also_removes_source():
+    repo = SqliteInvoiceRepository(":memory:")
+    repo.save(_invoice())
+    repo.save_source("INV-1", {"invoice_id": "INV-1"})
+    repo.delete("INV-1")
+    assert repo.get_source("INV-1") is None

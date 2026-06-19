@@ -164,3 +164,21 @@ def test_delete_non_draft_returns_409():
 
 def test_delete_unknown_returns_404():
     assert client.delete("/finance/invoices/NOPE").status_code == 404
+
+
+def test_compile_stores_source_for_edit():
+    client.post("/finance/invoices", json=_expense_payload("INV-SRC"))
+    source = client.get("/finance/invoices/INV-SRC/source")
+    assert source.status_code == 200
+    assert source.json()["invoice_id"] == "INV-SRC"
+    assert source.json()["expenses"][0]["type"] == "Fuel"
+
+
+def test_source_missing_returns_404():
+    assert client.get("/finance/invoices/NOPE/source").status_code == 404
+
+
+def test_recompile_non_draft_returns_409():
+    client.post("/finance/invoices", json=_expense_payload("INV-LOCK"))
+    client.post("/finance/invoices/INV-LOCK/approve")
+    assert client.post("/finance/invoices", json=_expense_payload("INV-LOCK")).status_code == 409

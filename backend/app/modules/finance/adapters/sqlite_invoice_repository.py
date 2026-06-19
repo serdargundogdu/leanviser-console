@@ -1,8 +1,9 @@
 """SQLite tabanlı InvoiceRepository adapter'ı (stdlib sqlite3).
 
-Faturayı JSON blob olarak saklar: invoices(id PK, data). Tek bağlantı tutulur
-(check_same_thread=False) ve işlemler bir Lock ile serileştirilir. Serileştirme
-mantığı invoice_serialization'da ortaktır (Postgres adapter'ı da kullanır).
+Faturayı JSON blob olarak saklar: invoices(id PK, data). Faturanın kaynak girdileri
+(derleme isteği) ayrı invoice_sources tablosunda opak JSON olarak tutulur (düzenleme
+için). Tek bağlantı tutulur (check_same_thread=False) ve işlemler bir Lock ile
+serileştirilir. Fatura serileştirmesi invoice_serialization'da ortaktır.
 
 Not: Cloud Run dosya sistemi geçicidir; kalıcı prod için PostgresInvoiceRepository
 (DATABASE_URL) kullanılır — aynı port.
@@ -27,6 +28,9 @@ class SqliteInvoiceRepository(InvoiceRepository):
         self._connection = sqlite3.connect(db_path, check_same_thread=False)
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+        )
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS invoice_sources (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
         )
         self._connection.commit()
 
@@ -57,4 +61,24 @@ class SqliteInvoiceRepository(InvoiceRepository):
     def delete(self, invoice_id: str) -> None:
         with self._lock:
             self._connection.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
+            self._connection.execute("DELETE FROM invoice_sources WHERE id = ?", (invoice_id,))
             self._connection.commit()
+
+    def save_source(self, invoice_id: str, source: dict) -> None:
+        payload = json.dumps(source)
+        with self._lock:
+            self._connection.execute(
+                "INSERT INTO invoice_sources (id, data) VALUES (?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+                (invoice_id, payload),
+            )
+            self._connection.commit()
+
+    def get_source(self, invoice_id: str) -> dict | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT data FROM invoice_sources WHERE id = ?", (invoice_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0])

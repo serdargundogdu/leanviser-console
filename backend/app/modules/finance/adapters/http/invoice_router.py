@@ -153,13 +153,21 @@ def compile_invoice(
     provider: Annotated[ExchangeRateProvider, Depends(get_exchange_rate_provider)],
     repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
 ) -> InvoiceResponse:
-    """Angajman girdisinden Draft fatura derler, kaydeder ve döner."""
+    """Angajman girdisinden Draft fatura derler, kaydeder ve döner.
+
+    Var olan ve Draft olmayan bir fatura yeniden derlenemez (commit'li kayıt korunur).
+    Kaynak girdiler düzenleme için saklanır.
+    """
+    existing = repository.get(request.invoice_id)
+    if existing is not None and existing.status is not InvoiceStatus.Draft:
+        raise HTTPException(status_code=409, detail="Onaylı/gönderilmiş fatura yeniden derlenemez")
     try:
         command = _to_command(request)
         invoice = CompileInvoice(provider).execute(command)
     except (ValueError, CurrencyMismatchError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     repository.save(invoice)
+    repository.save_source(invoice.id, request.model_dump(mode="json"))
     return _to_response(invoice)
 
 
@@ -229,3 +237,15 @@ def delete_invoice(
     if invoice.status is not InvoiceStatus.Draft:
         raise HTTPException(status_code=409, detail="Yalnız taslak fatura silinebilir")
     repository.delete(invoice_id)
+
+
+@router.get("/invoices/{invoice_id}/source", response_model=CompileInvoiceRequest)
+def get_invoice_source(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+) -> CompileInvoiceRequest:
+    """Faturanın kaynak girdilerini döndürür (düzenleme için); yoksa 404."""
+    source = repository.get_source(invoice_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"Kaynak girdiler bulunamadı: {invoice_id}")
+    return CompileInvoiceRequest(**source)
