@@ -99,6 +99,30 @@ class EInvoiceStatusLog:
 
 
 @dataclass(frozen=True)
+class InboxInvoice:
+    """Gelen kutusundaki (bize gelen) bir e-Fatura özeti."""
+
+    document_id: str  # entegratör GUID — PDF/işlem id'si
+    number: str  # GİB fatura numarası
+    sender_title: str  # gönderen unvanı
+    sender_tax_id: str  # gönderen VKN/TCKN
+    status: str
+    payable_amount: Decimal
+    currency: str
+    issue_date: datetime
+
+
+@dataclass(frozen=True)
+class InboxInvoicePage:
+    """Gelen kutusu sayfalı yanıtı."""
+
+    items: tuple[InboxInvoice, ...]
+    total_count: int
+    page_index: int
+    page_size: int
+
+
+@dataclass(frozen=True)
 class EInvoiceStatus:
     """Kesilmiş faturanın güncel durumu + işleme günlükleri.
 

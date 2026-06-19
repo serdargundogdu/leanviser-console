@@ -47,6 +47,18 @@ def test_get_recipient_aliases_empty_for_unregistered():
     assert _gateway().get_recipient_aliases("11111111111") == ()
 
 
+def test_list_inbox_invoices_and_pdf():
+    gateway = _gateway()
+    page = gateway.list_inbox_invoices(
+        datetime(2025, 1, 1), datetime(2026, 12, 31), page_index=0, page_size=3
+    )
+    assert page.total_count >= 0
+    if page.items:  # test hesabının gelen kutusu dolu
+        first = page.items[0]
+        assert first.document_id and first.number
+        assert gateway.get_inbox_invoice_pdf(first.document_id).startswith(b"%PDF")
+
+
 def test_send_invoice_earchive_succeeds():
     # Her koşuda benzersiz No/UUID (entegratör başarılı No'yu tekrar kabul etmez).
     number = f"LVS2026{int(time.time()) % 10**9:09d}"

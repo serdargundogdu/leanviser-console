@@ -15,6 +15,7 @@ Bu biçim canlı test endpoint'inde ampirik doğrulandı (IsSucceded=true).
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from functools import cached_property
 
 from lxml import etree
@@ -30,6 +31,8 @@ from app.modules.finance.application.einvoice_models import (
     EInvoiceSendResult,
     EInvoiceStatus,
     EInvoiceStatusLog,
+    InboxInvoice,
+    InboxInvoicePage,
 )
 
 # Test ortamı (CAPTCHA'sız; herkese açık test creds: Uyumsoft/Uyumsoft).
@@ -160,6 +163,50 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
         if not data:
             raise EInvoiceGatewayError(f"PDF bulunamadı: {invoice_id}")
         return data  # zeep base64Binary'yi zaten bytes'a çözer
+
+    def list_inbox_invoices(
+        self,
+        create_start: datetime,
+        create_end: datetime,
+        page_index: int = 0,
+        page_size: int = 20,
+    ) -> InboxInvoicePage:
+        query_type = self._client.get_type("ns0:InboxInvoiceListQueryModel")
+        query = query_type(
+            CreateStartDate=create_start,
+            CreateEndDate=create_end,
+            PageIndex=page_index,
+            PageSize=page_size,
+            IsArchived=False,  # zorunlu bool
+            OnlyNewestInvoices=False,  # zorunlu bool
+        )
+        value = self._value(self._client.service.GetInboxInvoiceList(query))
+        items = getattr(value, "Items", None) or []
+        return InboxInvoicePage(
+            items=tuple(
+                InboxInvoice(
+                    document_id=item.DocumentId,  # PDF/işlem id'si (GUID)
+                    number=item.InvoiceId or "",  # GİB numarası
+                    sender_title=item.TargetTitle or "",
+                    sender_tax_id=item.TargetTcknVkn or "",
+                    status=str(item.Status) if item.Status is not None else "",
+                    payable_amount=item.PayableAmount or Decimal(0),
+                    currency=item.DocumentCurrencyCode or "",
+                    issue_date=item.CreateDateUtc,
+                )
+                for item in items
+            ),
+            total_count=value.TotalCount or 0,
+            page_index=value.PageIndex or 0,
+            page_size=value.PageSize or page_size,
+        )
+
+    def get_inbox_invoice_pdf(self, document_id: str) -> bytes:
+        value = self._value(self._client.service.GetInboxInvoicePdf(document_id))
+        data = getattr(value, "Data", None)
+        if not data:
+            raise EInvoiceGatewayError(f"Gelen fatura PDF bulunamadı: {document_id}")
+        return data
 
     @staticmethod
     def _resolve_alias(req: EInvoiceRequest, customer_alias: str | None) -> str:

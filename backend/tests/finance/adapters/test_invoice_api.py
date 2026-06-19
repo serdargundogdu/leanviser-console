@@ -18,6 +18,8 @@ from app.modules.finance.application.einvoice_models import (
     EInvoiceSendResult,
     EInvoiceStatus,
     EInvoiceStatusLog,
+    InboxInvoice,
+    InboxInvoicePage,
     Party,
 )
 from app.modules.finance.domain.fx import ExchangeRate
@@ -60,6 +62,24 @@ class _FakeEInvoiceGateway:
 
     def get_invoice_pdf(self, invoice_id: str) -> bytes:
         return b"%PDF-1.4 fake"
+
+    def list_inbox_invoices(self, create_start, create_end, page_index=0, page_size=20):
+        item = InboxInvoice(
+            document_id="doc-1",
+            number="ABC2026000000001",
+            sender_title="Gönderen A.Ş.",
+            sender_tax_id="9000068418",
+            status="Approved",
+            payable_amount=Decimal("120.00"),
+            currency="TRY",
+            issue_date=datetime(2026, 6, 18, 10, 0),
+        )
+        return InboxInvoicePage(
+            items=(item,), total_count=1, page_index=page_index, page_size=page_size
+        )
+
+    def get_inbox_invoice_pdf(self, document_id: str) -> bytes:
+        return b"%PDF-1.4 inbox"
 
 
 app.dependency_overrides[get_exchange_rate_provider] = _StubRates
@@ -318,6 +338,24 @@ def test_recipient_aliases_returns_list():
 def test_recipient_aliases_empty_for_unregistered():
     body = client.get("/finance/recipient-aliases/11111111111").json()
     assert body["aliases"] == []
+
+
+def test_inbox_lists_received_invoices():
+    body = client.get("/finance/inbox").json()
+    assert body["total_count"] == 1
+    item = body["items"][0]
+    assert item["document_id"] == "doc-1"
+    assert item["number"] == "ABC2026000000001"
+    assert item["sender_title"] == "Gönderen A.Ş."
+    assert item["payable_amount"] == "120.00"
+    assert item["currency"] == "TRY"
+
+
+def test_inbox_invoice_pdf():
+    response = client.get("/finance/inbox/doc-1/pdf")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
 
 
 def test_einvoice_status_not_issued_returns_409():

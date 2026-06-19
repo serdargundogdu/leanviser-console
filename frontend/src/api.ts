@@ -84,6 +84,24 @@ export type RecipientAliasesResponse = {
   aliases: string[];
 };
 
+export type InboxInvoiceOut = {
+  document_id: string;
+  number: string;
+  sender_title: string;
+  sender_tax_id: string;
+  status: string;
+  payable_amount: string;
+  currency: string;
+  issue_date: string;
+};
+
+export type InboxPageResponse = {
+  items: InboxInvoiceOut[];
+  total_count: number;
+  page_index: number;
+  page_size: number;
+};
+
 export async function compileInvoice(
   request: CompileInvoiceRequest,
 ): Promise<InvoiceResponse> {
@@ -199,6 +217,29 @@ export async function getEInvoiceStatus(id: string): Promise<EInvoiceStatusRespo
 
 export function einvoicePdfUrl(id: string): string {
   return `/api/finance/invoices/${id}/einvoice-pdf`;
+}
+
+export async function listInbox(start: string, end: string): Promise<InboxPageResponse> {
+  const response = await fetch(
+    `/api/finance/inbox?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+  );
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const data = JSON.parse(detail);
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // detail düz metin kalsın
+    }
+    throw new Error(`Hata ${response.status}: ${detail}`);
+  }
+  return (await response.json()) as InboxPageResponse;
+}
+
+export function inboxPdfUrl(documentId: string): string {
+  return `/api/finance/inbox/${encodeURIComponent(documentId)}/pdf`;
 }
 
 export async function getRecipientAliases(vkn: string): Promise<RecipientAliasesResponse> {

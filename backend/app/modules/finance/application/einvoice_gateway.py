@@ -16,6 +16,7 @@ from app.modules.finance.application.einvoice_models import (
     EInvoiceRequest,
     EInvoiceSendResult,
     EInvoiceStatus,
+    InboxInvoicePage,
 )
 
 
@@ -57,4 +58,18 @@ class EInvoiceGateway(Protocol):
 
     def get_invoice_pdf(self, invoice_id: str) -> bytes:
         """Kesilmiş faturanın (ETTN) PDF'ini ham bytes olarak döndürür."""
+        ...
+
+    def list_inbox_invoices(
+        self,
+        create_start: datetime,
+        create_end: datetime,
+        page_index: int = 0,
+        page_size: int = 20,
+    ) -> InboxInvoicePage:
+        """Gelen kutusundaki e-Faturaları (tarih aralığı + sayfalama) döndürür."""
+        ...
+
+    def get_inbox_invoice_pdf(self, document_id: str) -> bytes:
+        """Gelen faturanın (DocumentId/GUID) PDF'ini ham bytes olarak döndürür."""
         ...

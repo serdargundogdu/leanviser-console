@@ -7,7 +7,7 @@ olarak kullanılmaz — Pydantic alan tiplerini kuruluşta gerçek tip olarak is
 """
 
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
@@ -119,6 +119,28 @@ class RecipientAliasesResponse(BaseModel):
 
     vkn_tckn: str
     aliases: list[str]
+
+
+class InboxInvoiceOut(BaseModel):
+    """Gelen kutusu fatura özeti (tutar string)."""
+
+    document_id: str
+    number: str
+    sender_title: str
+    sender_tax_id: str
+    status: str
+    payable_amount: str
+    currency: str
+    issue_date: datetime
+
+
+class InboxPageResponse(BaseModel):
+    """Gelen kutusu sayfalı yanıtı."""
+
+    items: list[InboxInvoiceOut]
+    total_count: int
+    page_index: int
+    page_size: int
 
 
 class InvoiceLineOut(BaseModel):
@@ -411,6 +433,63 @@ def recipient_aliases(
     except EInvoiceGatewayError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return RecipientAliasesResponse(vkn_tckn=vkn_tckn, aliases=list(aliases))
+
+
+@router.get("/inbox", response_model=InboxPageResponse)
+def list_inbox(
+    gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
+    start: date | None = None,
+    end: date | None = None,
+    page: int = 0,
+    size: int = 20,
+) -> InboxPageResponse:
+    """Gelen kutusundaki e-Faturaları döndürür. start/end verilmezse son 30 gün."""
+    end_date = end or date.today()
+    start_date = start or (end_date - timedelta(days=30))
+    try:
+        result = gateway.list_inbox_invoices(
+            datetime.combine(start_date, datetime.min.time()),
+            datetime.combine(end_date, datetime.max.time()),
+            page_index=page,
+            page_size=size,
+        )
+    except EInvoiceGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return InboxPageResponse(
+        items=[
+            InboxInvoiceOut(
+                document_id=item.document_id,
+                number=item.number,
+                sender_title=item.sender_title,
+                sender_tax_id=item.sender_tax_id,
+                status=item.status,
+                payable_amount=str(item.payable_amount),
+                currency=item.currency,
+                issue_date=item.issue_date,
+            )
+            for item in result.items
+        ],
+        total_count=result.total_count,
+        page_index=result.page_index,
+        page_size=result.page_size,
+    )
+
+
+@router.get("/inbox/{document_id}/pdf")
+def inbox_invoice_pdf(
+    document_id: str,
+    gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
+) -> Response:
+    """Gelen faturanın PDF'ini döndürür (application/pdf)."""
+    try:
+        pdf = gateway.get_inbox_invoice_pdf(document_id)
+    except EInvoiceGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{document_id}.pdf"'},
+    )
 
 
 @router.delete("/invoices/{invoice_id}", status_code=204)

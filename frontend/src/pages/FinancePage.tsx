@@ -7,9 +7,12 @@ import {
   getEInvoiceStatus,
   getInvoiceSource,
   getRecipientAliases,
+  inboxPdfUrl,
   issueEInvoice,
+  listInbox,
   listInvoices,
   type EInvoiceStatusResponse,
+  type InboxInvoiceOut,
   type InvoiceResponse,
 } from "../api";
 import { formatDate, formatMoney, statusColor, statusLabel } from "../format";
@@ -52,6 +55,8 @@ const bannerText: CSSProperties = { whiteSpace: "pre-wrap", overflowWrap: "anywh
 const leftCell: CSSProperties = { textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #eee" };
 const rightCell: CSSProperties = { textAlign: "right", padding: "6px 8px", borderBottom: "1px solid #eee" };
 
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
 function StatusBadge({ status }: { status: string }) {
   return <span style={{ color: statusColor(status), fontWeight: 600 }}>{statusLabel(status)}</span>;
 }
@@ -78,6 +83,11 @@ export default function FinancePage() {
   const [aliasOptions, setAliasOptions] = useState<string[]>([]);
   const [aliasFetched, setAliasFetched] = useState(false);
   const [statusInfo, setStatusInfo] = useState<EInvoiceStatusResponse | null>(null);
+  const [inboxStart, setInboxStart] = useState(isoDate(new Date(Date.now() - 30 * 86400000)));
+  const [inboxEnd, setInboxEnd] = useState(isoDate(new Date()));
+  const [inboxItems, setInboxItems] = useState<InboxInvoiceOut[] | null>(null);
+  const [inboxTotal, setInboxTotal] = useState(0);
+  const [inboxLoading, setInboxLoading] = useState(false);
 
   function loadInvoices() {
     listInvoices()
@@ -216,6 +226,20 @@ export default function FinancePage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIssuing(false);
+    }
+  }
+
+  async function handleLoadInbox() {
+    setError(null);
+    setInboxLoading(true);
+    try {
+      const page = await listInbox(inboxStart, inboxEnd);
+      setInboxItems(page.items);
+      setInboxTotal(page.total_count);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInboxLoading(false);
     }
   }
 
@@ -606,6 +630,58 @@ export default function FinancePage() {
           </table>
         </section>
       )}
+
+      <section style={{ marginTop: "2rem" }}>
+        <h3>Gelen Kutusu (e-Fatura)</h3>
+        <div style={rowStyle}>
+          <label style={field}>
+            <span style={labelText}>Başlangıç</span>
+            <input type="date" value={inboxStart} onChange={(e) => setInboxStart(e.target.value)} />
+          </label>
+          <label style={field}>
+            <span style={labelText}>Bitiş</span>
+            <input type="date" value={inboxEnd} onChange={(e) => setInboxEnd(e.target.value)} />
+          </label>
+          <button type="button" onClick={handleLoadInbox} disabled={inboxLoading}>
+            {inboxLoading ? "Yükleniyor…" : "Getir"}
+          </button>
+        </div>
+        {inboxItems && (
+          <>
+            <p style={{ color: "#6b7280" }}>
+              Toplam {inboxTotal} fatura — ilk {inboxItems.length} gösteriliyor
+            </p>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={leftCell}>No</th>
+                  <th style={leftCell}>Gönderen</th>
+                  <th style={rightCell}>Tutar</th>
+                  <th style={leftCell}>Tarih</th>
+                  <th style={leftCell}>Durum</th>
+                  <th style={leftCell}>PDF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inboxItems.map((item) => (
+                  <tr key={item.document_id}>
+                    <td style={leftCell}>{item.number}</td>
+                    <td style={leftCell}>{item.sender_title}</td>
+                    <td style={rightCell}>{formatMoney(item.payable_amount, item.currency)}</td>
+                    <td style={leftCell}>{new Date(item.issue_date).toLocaleDateString("tr-TR")}</td>
+                    <td style={leftCell}>{item.status}</td>
+                    <td style={leftCell}>
+                      <a href={inboxPdfUrl(item.document_id)} target="_blank" rel="noreferrer">
+                        PDF
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </section>
     </main>
   );
 }
