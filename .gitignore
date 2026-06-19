@@ -25,3 +25,6 @@ dist/
 
 # Claude Code (local)
 .claude/launch.json
+
+# Local SQLite (runtime)
+*.db

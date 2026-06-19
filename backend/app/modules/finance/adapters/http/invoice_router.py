@@ -13,13 +13,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.modules.finance.adapters.http.dependencies import get_exchange_rate_provider
+from app.modules.finance.adapters.http.dependencies import (
+    get_exchange_rate_provider,
+    get_invoice_repository,
+)
 from app.modules.finance.application.compile_invoice import (
     CompileInvoice,
     CompileInvoiceCommand,
     ServiceItem,
 )
 from app.modules.finance.application.exchange_rate_provider import ExchangeRateProvider
+from app.modules.finance.application.invoice_repository import InvoiceRepository
 from app.modules.finance.domain.expense import Expense, ExpenseType
 from app.modules.finance.domain.invoice import Invoice
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
@@ -146,11 +150,25 @@ def _to_response(invoice: Invoice) -> InvoiceResponse:
 def compile_invoice(
     request: CompileInvoiceRequest,
     provider: Annotated[ExchangeRateProvider, Depends(get_exchange_rate_provider)],
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
 ) -> InvoiceResponse:
-    """Angajman girdisinden Draft fatura derler ve döner."""
+    """Angajman girdisinden Draft fatura derler, kaydeder ve döner."""
     try:
         command = _to_command(request)
         invoice = CompileInvoice(provider).execute(command)
     except (ValueError, CurrencyMismatchError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    repository.save(invoice)
+    return _to_response(invoice)
+
+
+@router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
+def get_invoice(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+) -> InvoiceResponse:
+    """Kayıtlı faturayı id ile döndürür; yoksa 404."""
+    invoice = repository.get(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
     return _to_response(invoice)
