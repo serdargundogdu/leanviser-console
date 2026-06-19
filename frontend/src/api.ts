@@ -63,3 +63,11 @@ export async function compileInvoice(
   }
   return (await response.json()) as InvoiceResponse;
 }
+
+export async function listInvoices(): Promise<InvoiceResponse[]> {
+  const response = await fetch("/api/finance/invoices");
+  if (!response.ok) {
+    throw new Error(`Hata ${response.status}`);
+  }
+  return (await response.json()) as InvoiceResponse[];
+}

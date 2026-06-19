@@ -1,5 +1,5 @@
-import { useState, type CSSProperties, type FormEvent } from "react";
-import { compileInvoice, type InvoiceResponse } from "../api";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { compileInvoice, listInvoices, type InvoiceResponse } from "../api";
 
 const CURRENCIES = ["EUR", "USD", "TRY"];
 const EXPENSE_TYPES = ["Fuel", "Meal", "Parking", "Toll", "FlightTicket", "Other"];
@@ -21,8 +21,19 @@ export default function FinancePage() {
   const [expVat, setExpVat] = useState("0.20");
 
   const [invoice, setInvoice] = useState<InvoiceResponse | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function loadInvoices() {
+    listInvoices()
+      .then(setInvoices)
+      .catch(() => {
+        // liste yenilenemezse form akışını bozmadan sessiz geç
+      });
+  }
+
+  useEffect(loadInvoices, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -31,7 +42,7 @@ export default function FinancePage() {
     setInvoice(null);
     try {
       const result = await compileInvoice({
-        invoice_id: "INV-1",
+        invoice_id: `INV-${issueDate}-${days}`,
         customer_company: customer,
         issue_date: issueDate,
         currency: "TRY",
@@ -39,6 +50,7 @@ export default function FinancePage() {
         expenses: [{ type: expType, gross: expGross, vat_rate: expVat, currency: "TRY" }],
       });
       setInvoice(result);
+      loadInvoices();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -162,6 +174,34 @@ export default function FinancePage() {
                 </td>
               </tr>
             </tfoot>
+          </table>
+        </section>
+      )}
+
+      {invoices.length > 0 && (
+        <section style={{ marginTop: "2rem" }}>
+          <h3>Kayıtlı Faturalar ({invoices.length})</h3>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={leftCell}>No</th>
+                <th style={leftCell}>Müşteri</th>
+                <th style={leftCell}>Durum</th>
+                <th style={rightCell}>Toplam</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((saved) => (
+                <tr key={saved.id}>
+                  <td style={leftCell}>{saved.id}</td>
+                  <td style={leftCell}>{saved.customer_company}</td>
+                  <td style={leftCell}>{saved.status}</td>
+                  <td style={rightCell}>
+                    {saved.total} {saved.currency}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </section>
       )}
