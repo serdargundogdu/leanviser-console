@@ -130,6 +130,15 @@ def test_status_machine_draft_to_approved_to_sent():
     assert invoice.status is InvoiceStatus.Sent
 
 
+def test_send_records_ettn():
+    invoice = _invoice()
+    invoice.add_line(_expense_line())
+    invoice.approve()
+    invoice.send(ettn="ETTN-9")
+    assert invoice.status is InvoiceStatus.Sent
+    assert invoice.ettn == "ETTN-9"
+
+
 def test_cannot_approve_empty_invoice():
     invoice = _invoice()
     with pytest.raises(InvoiceStateError):

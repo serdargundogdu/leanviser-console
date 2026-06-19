@@ -15,16 +15,26 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.modules.finance.adapters.http.dependencies import (
+    get_einvoice_gateway,
+    get_einvoice_supplier,
     get_exchange_rate_provider,
     get_invoice_repository,
 )
+from app.modules.finance.adapters.uyumsoft_einvoice_gateway import EInvoiceGatewayError
 from app.modules.finance.application.compile_invoice import (
     CompileInvoice,
     CompileInvoiceCommand,
     ServiceItem,
 )
+from app.modules.finance.application.einvoice_gateway import EInvoiceGateway
+from app.modules.finance.application.einvoice_models import Party
 from app.modules.finance.application.exchange_rate_provider import ExchangeRateProvider
 from app.modules.finance.application.invoice_repository import InvoiceRepository
+from app.modules.finance.application.issue_einvoice import (
+    EInvoiceIssueError,
+    IssueEInvoice,
+    IssueEInvoiceCommand,
+)
 from app.modules.finance.domain.expense import Expense, ExpenseType
 from app.modules.finance.domain.invoice import Invoice, InvoiceStateError, InvoiceStatus
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
@@ -63,6 +73,26 @@ class CompileInvoiceRequest(BaseModel):
     expenses: list[ExpenseIn] = []
 
 
+class CustomerPartyIn(BaseModel):
+    """e-Fatura alıcı kimliği (domain'de tutulmayan; kesme anında verilir)."""
+
+    tax_id: str  # VKN (10) ya da TCKN (11)
+    name: str
+    tax_office: str = ""
+    city: str = ""
+    district: str = ""
+    street: str = ""
+    first_name: str = ""  # gerçek kişi (TCKN) için
+    family_name: str = ""
+
+
+class IssueEInvoiceRequest(BaseModel):
+    """Onaylı faturayı e-Fatura/e-Arşiv olarak kesme isteği."""
+
+    customer: CustomerPartyIn
+    customer_alias: str | None = None  # e-Fatura alıcı etiketi (GİB); e-Arşiv'de boş
+
+
 class InvoiceLineOut(BaseModel):
     """Yanıt kalemi (tutarlar string). line_total nettir; vat_amount KDV tutarı."""
 
@@ -86,6 +116,7 @@ class InvoiceResponse(BaseModel):
     total: str
     vat_total: str
     gross_total: str
+    ettn: str | None = None
 
 
 def _currency(code: str) -> Currency:
@@ -154,6 +185,7 @@ def _to_response(invoice: Invoice) -> InvoiceResponse:
         total=str(invoice.total().amount),
         vat_total=str(invoice.vat_total().amount),
         gross_total=str(invoice.gross_total().amount),
+        ettn=invoice.ettn,
     )
 
 
@@ -231,8 +263,41 @@ def send_invoice(
     invoice_id: str,
     repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
 ) -> InvoiceResponse:
-    """Onaylı faturayı gönderir (Approved -> Sent)."""
+    """Onaylı faturayı gönderir (Approved -> Sent), entegratör olmadan."""
     return _transition(invoice_id, repository, lambda invoice: invoice.send())
+
+
+@router.post("/invoices/{invoice_id}/issue", response_model=InvoiceResponse)
+def issue_einvoice(
+    invoice_id: str,
+    request: IssueEInvoiceRequest,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+    gateway: Annotated[EInvoiceGateway, Depends(get_einvoice_gateway)],
+    supplier: Annotated[Party, Depends(get_einvoice_supplier)],
+) -> InvoiceResponse:
+    """Onaylı faturayı entegratöre e-Fatura/e-Arşiv olarak keser.
+
+    Başarıda fatura Sent'e geçer ve ETTN kaydedilir. Entegratörün iş kuralı reddi
+    422, taşıma/SOAP hatası 502, durum hatası (onaylı değil) 409 döner.
+    """
+    invoice = repository.get(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
+    customer = Party(**request.customer.model_dump())
+    command = IssueEInvoiceCommand(
+        customer=customer, supplier=supplier, customer_alias=request.customer_alias
+    )
+    try:
+        result = IssueEInvoice(gateway).execute(invoice, command)
+    except EInvoiceIssueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except EInvoiceGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if not result.succeeded:
+        raise HTTPException(status_code=422, detail=result.message or "Fatura kesilemedi")
+    invoice.send(ettn=result.ettn)
+    repository.save(invoice)
+    return _to_response(invoice)
 
 
 @router.delete("/invoices/{invoice_id}", status_code=204)

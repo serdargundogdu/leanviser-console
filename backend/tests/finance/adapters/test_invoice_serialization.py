@@ -71,3 +71,11 @@ def test_legacy_line_without_vat_rate_defaults_to_general_rate():
     del data["lines"][0]["vat_rate"]  # KDV oranı yazılmadan kaydedilmiş eski kayıt
     restored = invoice_from_dict(data)
     assert restored.lines[0].vat_rate == VatRate(Decimal("0.20"))
+
+
+def test_roundtrip_preserves_ettn():
+    invoice = _invoice()  # onaylı
+    invoice.send(ettn="ETTN-X")  # Sent + ETTN
+    restored = invoice_from_dict(invoice_to_dict(invoice))
+    assert restored.status is InvoiceStatus.Sent
+    assert restored.ettn == "ETTN-X"

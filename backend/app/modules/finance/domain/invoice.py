@@ -81,6 +81,8 @@ class Invoice:
         self.issue_date = issue_date
         self._status = InvoiceStatus.Draft
         self._lines: list[InvoiceLine] = []
+        # Entegratörce atanan ETTN (e-belge kimliği); gönderildiğinde dolar.
+        self.ettn: str | None = None
 
     @classmethod
     def reconstitute(
@@ -91,6 +93,7 @@ class Invoice:
         issue_date: date,
         status: InvoiceStatus,
         lines: list[InvoiceLine],
+        ettn: str | None = None,
     ) -> Invoice:
         """Kalıcılıktan yeniden kurar; durum/kalemleri doğrudan yükler.
 
@@ -100,6 +103,7 @@ class Invoice:
         invoice = cls(id, customer_company, currency, issue_date)
         invoice._status = status
         invoice._lines = list(lines)
+        invoice.ettn = ettn
         return invoice
 
     @property
@@ -147,11 +151,13 @@ class Invoice:
             raise InvoiceStateError("Boş fatura onaylanamaz")
         self._status = InvoiceStatus.Approved
 
-    def send(self) -> None:
-        """Approved -> Sent."""
+    def send(self, ettn: str | None = None) -> None:
+        """Approved -> Sent. Entegratörle kesildiyse ETTN birlikte kaydedilir."""
         if self._status is not InvoiceStatus.Approved:
             raise InvoiceStateError("Yalnız onaylı fatura gönderilebilir")
         self._status = InvoiceStatus.Sent
+        if ettn is not None:
+            self.ettn = ettn
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Invoice) and other.id == self.id
