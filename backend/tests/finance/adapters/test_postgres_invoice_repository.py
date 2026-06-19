@@ -13,6 +13,7 @@ import pytest
 from app.modules.finance.adapters.postgres_invoice_repository import PostgresInvoiceRepository
 from app.modules.finance.domain.invoice import Invoice, InvoiceLine, InvoiceStatus
 from app.modules.finance.domain.money import Currency, Money
+from app.modules.finance.domain.vat import VatRate
 
 _DSN = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(_DSN is None, reason="TEST_DATABASE_URL tanımlı değil")
@@ -63,3 +64,39 @@ def test_source_roundtrip():
     repo = PostgresInvoiceRepository(_DSN)
     repo.save_source("INV-PG-SRC", {"invoice_id": "INV-PG-SRC", "service_items": []})
     assert repo.get_source("INV-PG-SRC") == {"invoice_id": "INV-PG-SRC", "service_items": []}
+
+
+def test_next_invoice_sequence_is_monotonic_per_series():
+    repo = PostgresInvoiceRepository(_DSN)
+    a1 = repo.next_invoice_sequence("PGT", 2026)
+    a2 = repo.next_invoice_sequence("PGT", 2026)
+    b1 = repo.next_invoice_sequence("PGZ", 2099)  # ayrı (seri, yıl) -> bağımsız sayaç
+    a3 = repo.next_invoice_sequence("PGT", 2026)
+    assert a2 == a1 + 1
+    assert a3 == a2 + 1
+    assert b1 >= 1
+
+
+def test_gib_number_ettn_and_per_line_vat_roundtrip():
+    repo = PostgresInvoiceRepository(_DSN)
+    invoice = _invoice("INV-PG-VAT")  # 1. kalem: net 200, KDV %20
+    invoice.add_line(
+        InvoiceLine(
+            description="İkinci kalem",
+            unit_price=Money(Decimal("50.00"), Currency.TRY),
+            quantity=Decimal("1"),
+            vat_rate=VatRate(Decimal("0.10")),
+        )
+    )
+    invoice.gib_number = "LVS2026000000099"
+    invoice.approve()
+    invoice.send(ettn="ETTN-PG")
+    repo.save(invoice)
+
+    loaded = repo.get("INV-PG-VAT")
+    assert loaded.status is InvoiceStatus.Sent
+    assert loaded.gib_number == "LVS2026000000099"
+    assert loaded.ettn == "ETTN-PG"
+    assert loaded.lines[0].vat_rate == VatRate(Decimal("0.20"))
+    assert loaded.lines[1].vat_rate == VatRate(Decimal("0.10"))
+    assert loaded.vat_total() == Money(Decimal("45.00"), Currency.TRY)  # 40 + 5
