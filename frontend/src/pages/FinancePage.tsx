@@ -44,6 +44,11 @@ const field: CSSProperties = { display: "flex", gap: 12, alignItems: "center", m
 const labelText: CSSProperties = { minWidth: 110, color: "#374151" };
 const rowStyle: CSSProperties = { display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" };
 const addBtn: CSSProperties = { border: "1px dashed #9ca3af", borderRadius: 4, padding: "4px 10px", cursor: "pointer", background: "none", color: "#374151" };
+const banner: CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "10px 12px", borderRadius: 6, marginTop: 12, border: "1px solid" };
+const errorBox: CSSProperties = { ...banner, background: "#fef2f2", borderColor: "#fecaca", color: "#b91c1c" };
+const noticeBox: CSSProperties = { ...banner, background: "#ecfdf5", borderColor: "#a7f3d0", color: "#047857" };
+const dismissBtn: CSSProperties = { background: "none", border: "none", cursor: "pointer", fontSize: 18, lineHeight: 1, color: "inherit", padding: 0 };
+const bannerText: CSSProperties = { whiteSpace: "pre-wrap", overflowWrap: "anywhere" };
 const leftCell: CSSProperties = { textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #eee" };
 const rightCell: CSSProperties = { textAlign: "right", padding: "6px 8px", borderBottom: "1px solid #eee" };
 
@@ -380,8 +385,22 @@ export default function FinancePage() {
         </button>
       </form>
 
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      {notice && <p style={{ color: "#047857" }}>{notice}</p>}
+      {error && (
+        <div style={errorBox} role="alert">
+          <span style={bannerText}>{error}</span>
+          <button type="button" style={dismissBtn} aria-label="Hatayı kapat" onClick={() => setError(null)}>
+            ×
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div style={noticeBox}>
+          <span style={bannerText}>{notice}</span>
+          <button type="button" style={dismissBtn} aria-label="Bildirimi kapat" onClick={() => setNotice(null)}>
+            ×
+          </button>
+        </div>
+      )}
 
       {invoice && (
         <section style={{ marginTop: "1.5rem" }}>
