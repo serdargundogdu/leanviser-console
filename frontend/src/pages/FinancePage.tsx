@@ -4,8 +4,8 @@ import {
   compileInvoice,
   deleteInvoice,
   getInvoiceSource,
+  issueEInvoice,
   listInvoices,
-  sendInvoice,
   type InvoiceResponse,
 } from "../api";
 import { formatDate, formatMoney, statusColor, statusLabel } from "../format";
@@ -16,6 +16,25 @@ const VAT_RATES = ["0.00", "0.01", "0.10", "0.20"];
 
 type ServiceRow = { description: string; dailyRate: string; currency: string; days: string; vatRate: string };
 type ExpenseRow = { type: string; gross: string; vatRate: string };
+type CustomerForm = {
+  taxId: string;
+  name: string;
+  firstName: string;
+  familyName: string;
+  city: string;
+  street: string;
+  alias: string;
+};
+
+const emptyCustomer: CustomerForm = {
+  taxId: "",
+  name: "",
+  firstName: "",
+  familyName: "",
+  city: "",
+  street: "",
+  alias: "",
+};
 
 const field: CSSProperties = { display: "flex", gap: 12, alignItems: "center", marginBottom: 8 };
 const labelText: CSSProperties = { minWidth: 110, color: "#374151" };
@@ -42,7 +61,11 @@ export default function FinancePage() {
   const [invoice, setInvoice] = useState<InvoiceResponse | null>(null);
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [issuingId, setIssuingId] = useState<string | null>(null);
+  const [issueCustomer, setIssueCustomer] = useState<CustomerForm>(emptyCustomer);
+  const [issuing, setIssuing] = useState(false);
 
   function loadInvoices() {
     listInvoices()
@@ -115,6 +138,48 @@ export default function FinancePage() {
       loadInvoices();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function startIssue(saved: InvoiceResponse) {
+    setError(null);
+    setNotice(null);
+    setIssuingId(saved.id);
+    // Unvan'ı kayıtlı müşteri firmadan ön-doldur; vergi kimliği elle girilir.
+    setIssueCustomer({ ...emptyCustomer, name: saved.customer_company });
+  }
+
+  function updateCustomer(patch: Partial<CustomerForm>) {
+    setIssueCustomer((current) => ({ ...current, ...patch }));
+  }
+
+  async function handleIssue(event: FormEvent) {
+    event.preventDefault();
+    if (!issuingId) {
+      return;
+    }
+    setIssuing(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await issueEInvoice(issuingId, {
+        customer: {
+          tax_id: issueCustomer.taxId,
+          name: issueCustomer.name,
+          city: issueCustomer.city,
+          street: issueCustomer.street,
+          first_name: issueCustomer.firstName,
+          family_name: issueCustomer.familyName,
+        },
+        customer_alias: issueCustomer.alias || null,
+      });
+      setNotice(`${result.id} e-Fatura olarak kesildi · ETTN ${result.ettn}`);
+      setIssuingId(null);
+      loadInvoices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIssuing(false);
     }
   }
 
@@ -274,6 +339,7 @@ export default function FinancePage() {
       </form>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {notice && <p style={{ color: "#047857" }}>{notice}</p>}
 
       {invoice && (
         <section style={{ marginTop: "1.5rem" }}>
@@ -328,6 +394,55 @@ export default function FinancePage() {
         </section>
       )}
 
+      {issuingId && (
+        <section style={{ marginTop: "1.5rem", border: "1px solid #d1d5db", borderRadius: 6, padding: "1rem" }}>
+          <h3 style={{ marginTop: 0 }}>e-Fatura Kes — {issuingId}</h3>
+          <p style={{ color: "#6b7280", marginTop: 0 }}>
+            Alıcı vergi bilgileri. VKN kayıtlı e-Fatura mükellefiyse e-Fatura, değilse e-Arşiv kesilir.
+          </p>
+          <form onSubmit={handleIssue}>
+            <label style={field}>
+              <span style={labelText}>VKN / TCKN</span>
+              <input value={issueCustomer.taxId} onChange={(e) => updateCustomer({ taxId: e.target.value })} />
+            </label>
+            <label style={field}>
+              <span style={labelText}>Unvan / Ad Soyad</span>
+              <input value={issueCustomer.name} onChange={(e) => updateCustomer({ name: e.target.value })} />
+            </label>
+            <label style={field}>
+              <span style={labelText}>Ad (kişi)</span>
+              <input value={issueCustomer.firstName} onChange={(e) => updateCustomer({ firstName: e.target.value })} />
+            </label>
+            <label style={field}>
+              <span style={labelText}>Soyad (kişi)</span>
+              <input value={issueCustomer.familyName} onChange={(e) => updateCustomer({ familyName: e.target.value })} />
+            </label>
+            <label style={field}>
+              <span style={labelText}>İl</span>
+              <input value={issueCustomer.city} onChange={(e) => updateCustomer({ city: e.target.value })} />
+            </label>
+            <label style={field}>
+              <span style={labelText}>Adres</span>
+              <input value={issueCustomer.street} onChange={(e) => updateCustomer({ street: e.target.value })} />
+            </label>
+            <label style={field}>
+              <span style={labelText}>Alıcı etiketi</span>
+              <input
+                placeholder="e-Fatura için; e-Arşiv'de boş bırakın"
+                value={issueCustomer.alias}
+                onChange={(e) => updateCustomer({ alias: e.target.value })}
+              />
+            </label>
+            <button type="submit" disabled={issuing} style={{ padding: "8px 16px", fontWeight: 600, marginTop: 8 }}>
+              {issuing ? "Kesiliyor…" : "Kes ve Gönder"}
+            </button>{" "}
+            <button type="button" onClick={() => setIssuingId(null)}>
+              Vazgeç
+            </button>
+          </form>
+        </section>
+      )}
+
       {invoices.length > 0 && (
         <section style={{ marginTop: "2rem" }}>
           <h3>Kayıtlı Faturalar ({invoices.length})</h3>
@@ -350,6 +465,9 @@ export default function FinancePage() {
                   <td style={leftCell}>{saved.customer_company}</td>
                   <td style={leftCell}>
                     <StatusBadge status={saved.status} />
+                    {saved.ettn && (
+                      <div style={{ fontSize: 11, color: "#6b7280" }}>ETTN: {saved.ettn}</div>
+                    )}
                   </td>
                   <td style={rightCell}>{formatMoney(saved.gross_total, saved.currency)}</td>
                   <td style={leftCell}>
@@ -361,7 +479,7 @@ export default function FinancePage() {
                       </>
                     )}
                     {saved.status === "Approved" && (
-                      <button onClick={() => runTransition(sendInvoice, saved.id)}>Gönder</button>
+                      <button onClick={() => startIssue(saved)}>e-Fatura Kes</button>
                     )}
                   </td>
                 </tr>

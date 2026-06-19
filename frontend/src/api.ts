@@ -44,6 +44,23 @@ export type InvoiceResponse = {
   total: string;
   vat_total: string;
   gross_total: string;
+  ettn: string | null;
+};
+
+export type CustomerPartyIn = {
+  tax_id: string;
+  name: string;
+  tax_office?: string;
+  city?: string;
+  district?: string;
+  street?: string;
+  first_name?: string;
+  family_name?: string;
+};
+
+export type IssueEInvoiceRequest = {
+  customer: CustomerPartyIn;
+  customer_alias?: string | null;
 };
 
 export async function compileInvoice(
@@ -116,6 +133,30 @@ export async function deleteInvoice(id: string): Promise<void> {
     }
     throw new Error(`Hata ${response.status}: ${detail}`);
   }
+}
+
+export async function issueEInvoice(
+  id: string,
+  request: IssueEInvoiceRequest,
+): Promise<InvoiceResponse> {
+  const response = await fetch(`/api/finance/invoices/${id}/issue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const data = JSON.parse(detail);
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // detail düz metin kalsın
+    }
+    throw new Error(`Hata ${response.status}: ${detail}`);
+  }
+  return (await response.json()) as InvoiceResponse;
 }
 
 export async function getInvoiceSource(id: string): Promise<CompileInvoiceRequest> {
