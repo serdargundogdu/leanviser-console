@@ -8,7 +8,7 @@ olmalıdır. HTTP/DB bilmez — port'a bağımlıdır, bağımlılık içe akar.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
@@ -17,6 +17,7 @@ from app.modules.finance.domain.expense import Expense
 from app.modules.finance.domain.fee_calculation import FeeCalculation
 from app.modules.finance.domain.invoice import Invoice, InvoiceLine
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
+from app.modules.finance.domain.vat import VatRate
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class ServiceItem:
     description: str
     daily_rate: Money
     days: Decimal
+    vat_rate: VatRate = field(default_factory=lambda: VatRate(Decimal("0.20")))
 
 
 @dataclass(frozen=True)
@@ -67,7 +69,10 @@ class CompileInvoice:
         if item.daily_rate.currency is currency:
             # aynı para birimi: doğrudan günlük ücret
             return InvoiceLine(
-                description=item.description, unit_price=item.daily_rate, quantity=item.days
+                description=item.description,
+                unit_price=item.daily_rate,
+                quantity=item.days,
+                vat_rate=item.vat_rate,
             )
         # döviz: TCMB kuruyla birim-önce TRY'ye çevrilir; kullanılan kur açıklamaya yazılır
         fx = self._rates.get_rate(item.daily_rate.currency, currency, as_of)
@@ -76,7 +81,12 @@ class CompileInvoice:
             f"{item.description} ({item.daily_rate.currency.code} kuru "
             f"{fx.as_of:%d.%m.%Y} · {fx.rate})"
         )
-        return InvoiceLine(description=description, unit_price=unit_price, quantity=item.days)
+        return InvoiceLine(
+            description=description,
+            unit_price=unit_price,
+            quantity=item.days,
+            vat_rate=item.vat_rate,
+        )
 
     @staticmethod
     def _expense_line(expense: Expense, currency: Currency) -> InvoiceLine:
@@ -87,4 +97,5 @@ class CompileInvoice:
             description=f"Masraf: {expense.type.value}",
             unit_price=net,
             quantity=Decimal(1),
+            vat_rate=expense.vat_rate,
         )

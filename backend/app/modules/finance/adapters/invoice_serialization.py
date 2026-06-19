@@ -12,6 +12,10 @@ from decimal import Decimal
 
 from app.modules.finance.domain.invoice import Invoice, InvoiceLine, InvoiceStatus
 from app.modules.finance.domain.money import Currency, Money
+from app.modules.finance.domain.vat import VatRate
+
+# KDV oranı yazılmadan kaydedilmiş eski kalemler için varsayılan (genel oran).
+_DEFAULT_VAT_RATE = "0.20"
 
 
 def invoice_to_dict(invoice: Invoice) -> dict:
@@ -27,6 +31,7 @@ def invoice_to_dict(invoice: Invoice) -> dict:
                 "unit_price": str(line.unit_price.amount),
                 "currency": line.unit_price.currency.code,
                 "quantity": str(line.quantity),
+                "vat_rate": str(line.vat_rate.rate),
             }
             for line in invoice.lines
         ],
@@ -39,6 +44,7 @@ def invoice_from_dict(data: dict) -> Invoice:
             description=line["description"],
             unit_price=Money(Decimal(line["unit_price"]), Currency[line["currency"]]),
             quantity=Decimal(line["quantity"]),
+            vat_rate=VatRate(Decimal(line.get("vat_rate", _DEFAULT_VAT_RATE))),
         )
         for line in data["lines"]
     ]

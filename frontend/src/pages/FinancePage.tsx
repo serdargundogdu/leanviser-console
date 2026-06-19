@@ -14,7 +14,7 @@ const CURRENCIES = ["EUR", "USD", "TRY"];
 const EXPENSE_TYPES = ["Fuel", "Meal", "Parking", "Toll", "FlightTicket", "Other"];
 const VAT_RATES = ["0.00", "0.01", "0.10", "0.20"];
 
-type ServiceRow = { description: string; dailyRate: string; currency: string; days: string };
+type ServiceRow = { description: string; dailyRate: string; currency: string; days: string; vatRate: string };
 type ExpenseRow = { type: string; gross: string; vatRate: string };
 
 const field: CSSProperties = { display: "flex", gap: 12, alignItems: "center", marginBottom: 8 };
@@ -33,7 +33,7 @@ export default function FinancePage() {
   const [customer, setCustomer] = useState("ACME");
   const [issueDate, setIssueDate] = useState("2026-06-19");
   const [serviceItems, setServiceItems] = useState<ServiceRow[]>([
-    { description: "Danışmanlık hizmet bedeli", dailyRate: "750.00", currency: "EUR", days: "16" },
+    { description: "Danışmanlık hizmet bedeli", dailyRate: "750.00", currency: "EUR", days: "16", vatRate: "0.20" },
   ]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([
     { type: "Fuel", gross: "120.00", vatRate: "0.20" },
@@ -77,6 +77,7 @@ export default function FinancePage() {
           daily_rate: s.dailyRate,
           currency: s.currency,
           days: s.days,
+          vat_rate: s.vatRate,
         })),
         expenses: expenses.map((e) => ({
           type: e.type,
@@ -130,6 +131,7 @@ export default function FinancePage() {
           dailyRate: String(s.daily_rate),
           currency: s.currency,
           days: String(s.days),
+          vatRate: String(s.vat_rate ?? "0.20"),
         })),
       );
       setExpenses(
@@ -197,6 +199,13 @@ export default function FinancePage() {
                 onChange={(e) => updateService(index, { days: e.target.value })}
                 style={{ width: 64 }}
               />
+              <select value={row.vatRate} onChange={(e) => updateService(index, { vatRate: e.target.value })}>
+                {VAT_RATES.map((rate) => (
+                  <option key={rate} value={rate}>
+                    KDV {rate}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 aria-label="Hizmet kalemini çıkar"
@@ -210,7 +219,7 @@ export default function FinancePage() {
             type="button"
             style={addBtn}
             onClick={() =>
-              setServiceItems((rows) => [...rows, { description: "", dailyRate: "0.00", currency: "EUR", days: "1" }])
+              setServiceItems((rows) => [...rows, { description: "", dailyRate: "0.00", currency: "EUR", days: "1", vatRate: "0.20" }])
             }
           >
             + Hizmet kalemi
@@ -278,7 +287,8 @@ export default function FinancePage() {
                 <th style={leftCell}>Açıklama</th>
                 <th style={rightCell}>Birim</th>
                 <th style={rightCell}>Miktar</th>
-                <th style={rightCell}>Tutar</th>
+                <th style={rightCell}>KDV</th>
+                <th style={rightCell}>Net Tutar</th>
               </tr>
             </thead>
             <tbody>
@@ -287,17 +297,30 @@ export default function FinancePage() {
                   <td style={leftCell}>{line.description}</td>
                   <td style={rightCell}>{formatMoney(line.unit_price, invoice.currency)}</td>
                   <td style={rightCell}>{line.quantity}</td>
+                  <td style={rightCell}>%{(Number(line.vat_rate) * 100).toFixed(0)}</td>
                   <td style={rightCell}>{formatMoney(line.line_total, invoice.currency)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
-                <td style={leftCell} colSpan={3}>
-                  <strong>Toplam</strong>
+                <td style={leftCell} colSpan={4}>
+                  Ara toplam (net)
+                </td>
+                <td style={rightCell}>{formatMoney(invoice.total, invoice.currency)}</td>
+              </tr>
+              <tr>
+                <td style={leftCell} colSpan={4}>
+                  KDV
+                </td>
+                <td style={rightCell}>{formatMoney(invoice.vat_total, invoice.currency)}</td>
+              </tr>
+              <tr>
+                <td style={leftCell} colSpan={4}>
+                  <strong>Genel Toplam</strong>
                 </td>
                 <td style={rightCell}>
-                  <strong>{formatMoney(invoice.total, invoice.currency)}</strong>
+                  <strong>{formatMoney(invoice.gross_total, invoice.currency)}</strong>
                 </td>
               </tr>
             </tfoot>
@@ -315,7 +338,7 @@ export default function FinancePage() {
                 <th style={leftCell}>Tarih</th>
                 <th style={leftCell}>Müşteri</th>
                 <th style={leftCell}>Durum</th>
-                <th style={rightCell}>Toplam</th>
+                <th style={rightCell}>Genel Toplam</th>
                 <th style={leftCell}>İşlem</th>
               </tr>
             </thead>
@@ -328,7 +351,7 @@ export default function FinancePage() {
                   <td style={leftCell}>
                     <StatusBadge status={saved.status} />
                   </td>
-                  <td style={rightCell}>{formatMoney(saved.total, saved.currency)}</td>
+                  <td style={rightCell}>{formatMoney(saved.gross_total, saved.currency)}</td>
                   <td style={leftCell}>
                     {saved.status === "Draft" && (
                       <>

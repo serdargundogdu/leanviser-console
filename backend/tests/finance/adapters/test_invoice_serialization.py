@@ -6,6 +6,7 @@ from decimal import Decimal
 from app.modules.finance.adapters.invoice_serialization import invoice_from_dict, invoice_to_dict
 from app.modules.finance.domain.invoice import Invoice, InvoiceLine, InvoiceStatus
 from app.modules.finance.domain.money import Currency, Money
+from app.modules.finance.domain.vat import VatRate
 
 
 def _invoice() -> Invoice:
@@ -43,3 +44,30 @@ def test_to_dict_is_json_friendly():
     assert data["currency"] == "TRY"
     assert data["status"] == "Approved"
     assert data["lines"][0]["unit_price"] == "35838.08"
+    assert data["lines"][0]["vat_rate"] == "0.20"
+
+
+def test_roundtrip_preserves_vat_rate():
+    invoice = Invoice(
+        id="INV-2",
+        customer_company="ACME",
+        currency=Currency.TRY,
+        issue_date=date(2026, 6, 19),
+    )
+    invoice.add_line(
+        InvoiceLine(
+            description="Hizmet",
+            unit_price=Money(Decimal("1000.00"), Currency.TRY),
+            quantity=Decimal("1"),
+            vat_rate=VatRate(Decimal("0.10")),
+        )
+    )
+    restored = invoice_from_dict(invoice_to_dict(invoice))
+    assert restored.lines[0].vat_rate == VatRate(Decimal("0.10"))
+
+
+def test_legacy_line_without_vat_rate_defaults_to_general_rate():
+    data = invoice_to_dict(_invoice())
+    del data["lines"][0]["vat_rate"]  # KDV oranı yazılmadan kaydedilmiş eski kayıt
+    restored = invoice_from_dict(data)
+    assert restored.lines[0].vat_rate == VatRate(Decimal("0.20"))

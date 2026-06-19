@@ -11,12 +11,17 @@ Ubiquitous Language: Fatura/kalem/durum -> Invoice/InvoiceLine/InvoiceStatus
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import Enum
 
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
+from app.modules.finance.domain.vat import VatRate
+
+# Açıkça verilmeyen ya da eski (KDV oranı yazılmadan kaydedilmiş) kalemler için
+# varsayılan genel KDV oranı. Yeni kalemler oranı her zaman açıkça taşır.
+_DEFAULT_VAT_RATE = Decimal("0.20")
 
 
 class InvoiceStateError(Exception):
@@ -33,15 +38,17 @@ class InvoiceStatus(Enum):
 
 @dataclass(frozen=True)
 class InvoiceLine:
-    """Fatura kalemi (değer nesnesi). line_total = unit_price × quantity.
+    """Fatura kalemi (değer nesnesi). line_total = unit_price × quantity (net).
 
     Hizmet kaleminde quantity = consultantDays, unit_price = (TRY'ye çevrilmiş)
-    dailyRate; masraf kaleminde quantity = 1, unit_price = net tutar.
+    dailyRate; masraf kaleminde quantity = 1, unit_price = net tutar. unit_price
+    KDV hariçtir; KDV oranı kalem üzerinde tutulur (vat_amount net üzerinden).
     """
 
     description: str
     unit_price: Money
     quantity: Decimal
+    vat_rate: VatRate = field(default_factory=lambda: VatRate(_DEFAULT_VAT_RATE))
 
     def __post_init__(self) -> None:
         if self.quantity <= 0:
@@ -50,7 +57,12 @@ class InvoiceLine:
             raise ValueError(f"Birim fiyat pozitif olmalı: {self.unit_price.amount}")
 
     def line_total(self) -> Money:
+        """Net kalem tutarı (KDV hariç)."""
         return self.unit_price.multiply(self.quantity)
+
+    def vat_amount(self) -> Money:
+        """Kalemin KDV tutarı (net × oran)."""
+        return self.line_total().multiply(self.vat_rate.rate)
 
 
 class Invoice:
@@ -110,11 +122,22 @@ class Invoice:
         self._lines.append(line)
 
     def total(self) -> Money:
-        """Kalem toplamlarının toplamı (kalem yoksa sıfır)."""
+        """Net toplam (KDV hariç kalem toplamlarının toplamı; kalem yoksa sıfır)."""
         running_total = Money(Decimal(0), self.currency)
         for line in self._lines:
             running_total = running_total.add(line.line_total())
         return running_total
+
+    def vat_total(self) -> Money:
+        """Toplam KDV (kalem KDV'lerinin toplamı)."""
+        running_total = Money(Decimal(0), self.currency)
+        for line in self._lines:
+            running_total = running_total.add(line.vat_amount())
+        return running_total
+
+    def gross_total(self) -> Money:
+        """Brüt toplam (net + KDV)."""
+        return self.total().add(self.vat_total())
 
     def approve(self) -> None:
         """Draft -> Approved. Boş fatura onaylanamaz."""

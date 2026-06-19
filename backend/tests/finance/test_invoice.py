@@ -12,6 +12,7 @@ from app.modules.finance.domain.invoice import (
     InvoiceStatus,
 )
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
+from app.modules.finance.domain.vat import VatRate
 
 
 def _try(amount: str) -> Money:
@@ -62,6 +63,35 @@ def test_total_sums_lines():
     invoice.add_line(_expense_line())
     assert invoice.total() == _try("573509.28")
     assert len(invoice.lines) == 2
+
+
+def test_line_defaults_to_general_vat_rate():
+    line = InvoiceLine(description="x", unit_price=_try("100.00"), quantity=Decimal("1"))
+    assert line.vat_rate == VatRate(Decimal("0.20"))
+    assert line.vat_amount() == _try("20.00")
+
+
+def test_invoice_vat_and_gross_totals():
+    invoice = _invoice()
+    invoice.add_line(
+        InvoiceLine(
+            description="x",
+            unit_price=_try("1000.00"),
+            quantity=Decimal("2"),
+            vat_rate=VatRate(Decimal("0.20")),
+        )
+    )
+    invoice.add_line(
+        InvoiceLine(
+            description="y",
+            unit_price=_try("500.00"),
+            quantity=Decimal("1"),
+            vat_rate=VatRate(Decimal("0.10")),
+        )
+    )
+    assert invoice.total() == _try("2500.00")  # net: 2000 + 500
+    assert invoice.vat_total() == _try("450.00")  # 400 + 50
+    assert invoice.gross_total() == _try("2950.00")
 
 
 def test_line_currency_must_match_invoice():

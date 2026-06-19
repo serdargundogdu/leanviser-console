@@ -40,6 +40,7 @@ class ServiceItemIn(BaseModel):
     daily_rate: Decimal
     currency: str
     days: Decimal
+    vat_rate: Decimal = Decimal("0.20")
 
 
 class ExpenseIn(BaseModel):
@@ -63,16 +64,18 @@ class CompileInvoiceRequest(BaseModel):
 
 
 class InvoiceLineOut(BaseModel):
-    """Yanıt kalemi (tutarlar string)."""
+    """Yanıt kalemi (tutarlar string). line_total nettir; vat_amount KDV tutarı."""
 
     description: str
     unit_price: str
     quantity: str
+    vat_rate: str
     line_total: str
+    vat_amount: str
 
 
 class InvoiceResponse(BaseModel):
-    """Derlenmiş fatura yanıtı."""
+    """Derlenmiş fatura yanıtı. total nettir; vat_total ve gross_total ayrıca verilir."""
 
     id: str
     status: str
@@ -81,6 +84,8 @@ class InvoiceResponse(BaseModel):
     issue_date: date
     lines: list[InvoiceLineOut]
     total: str
+    vat_total: str
+    gross_total: str
 
 
 def _currency(code: str) -> Currency:
@@ -103,6 +108,7 @@ def _to_command(request: CompileInvoiceRequest) -> CompileInvoiceCommand:
             description=item.description,
             daily_rate=Money(item.daily_rate, _currency(item.currency)),
             days=item.days,
+            vat_rate=VatRate(item.vat_rate),
         )
         for item in request.service_items
     )
@@ -139,11 +145,15 @@ def _to_response(invoice: Invoice) -> InvoiceResponse:
                 description=line.description,
                 unit_price=str(line.unit_price.amount),
                 quantity=str(line.quantity),
+                vat_rate=str(line.vat_rate.rate),
                 line_total=str(line.line_total().amount),
+                vat_amount=str(line.vat_amount().amount),
             )
             for line in invoice.lines
         ],
         total=str(invoice.total().amount),
+        vat_total=str(invoice.vat_total().amount),
+        gross_total=str(invoice.gross_total().amount),
     )
 
 

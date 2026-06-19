@@ -6,6 +6,7 @@ export type ServiceItemIn = {
   daily_rate: string;
   currency: string;
   days: string;
+  vat_rate: string;
 };
 
 export type ExpenseIn = {
@@ -28,7 +29,9 @@ export type InvoiceLineOut = {
   description: string;
   unit_price: string;
   quantity: string;
+  vat_rate: string;
   line_total: string;
+  vat_amount: string;
 };
 
 export type InvoiceResponse = {
@@ -39,6 +42,8 @@ export type InvoiceResponse = {
   issue_date: string;
   lines: InvoiceLineOut[];
   total: string;
+  vat_total: string;
+  gross_total: string;
 };
 
 export async function compileInvoice(

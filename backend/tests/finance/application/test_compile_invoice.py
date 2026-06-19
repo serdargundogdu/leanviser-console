@@ -113,6 +113,31 @@ def test_mixed_invoice_total_and_lines():
     assert len(invoice.lines) == 2
 
 
+def test_service_line_carries_vat_rate():
+    rates = _StubRates(Decimal("47.7841"))
+    command = _command(
+        service_items=(
+            ServiceItem(
+                description="Danışmanlık (TRY)",
+                daily_rate=_try("1000.00"),
+                days=Decimal("2"),
+                vat_rate=VatRate(Decimal("0.10")),
+            ),
+        )
+    )
+    invoice = CompileInvoice(rates).execute(command)
+    assert invoice.lines[0].vat_rate == VatRate(Decimal("0.10"))
+    assert invoice.vat_total() == _try("200.00")  # net 2000 × 0.10
+
+
+def test_expense_line_inherits_expense_vat_rate():
+    rates = _StubRates(Decimal("47.7841"))
+    command = _command(expenses=(_expense(_try("120.00")),))  # KDV %20 -> net 100
+    invoice = CompileInvoice(rates).execute(command)
+    assert invoice.lines[0].vat_rate == VatRate(Decimal("0.20"))
+    assert invoice.vat_total() == _try("20.00")
+
+
 def test_foreign_expense_rejected():
     rates = _StubRates(Decimal("47.7841"))
     command = _command(expenses=(_expense(Money(Decimal("120.00"), Currency.EUR)),))

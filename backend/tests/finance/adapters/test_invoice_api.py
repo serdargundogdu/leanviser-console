@@ -54,6 +54,31 @@ def test_compile_invoice_returns_lines_and_total():
     assert body["lines"][1]["line_total"] == "100.00"
 
 
+def test_response_includes_vat_breakdown():
+    payload = {
+        "invoice_id": "INV-VAT",
+        "customer_company": "ACME",
+        "issue_date": "2026-06-19",
+        "currency": "TRY",
+        "service_items": [
+            {
+                "description": "Danışmanlık (TRY)",
+                "daily_rate": "1000.00",
+                "currency": "TRY",
+                "days": "2",
+                "vat_rate": "0.20",
+            }
+        ],
+        "expenses": [],
+    }
+    body = client.post("/finance/invoices", json=payload).json()
+    assert body["total"] == "2000.00"  # net
+    assert body["vat_total"] == "400.00"
+    assert body["gross_total"] == "2400.00"
+    assert body["lines"][0]["vat_rate"] == "0.20"
+    assert body["lines"][0]["vat_amount"] == "400.00"
+
+
 def test_invalid_currency_returns_422():
     payload = {
         "invoice_id": "INV-2",
