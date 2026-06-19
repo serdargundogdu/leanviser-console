@@ -71,6 +71,8 @@ def test_fx_service_line_is_unit_first():
     assert invoice.status is InvoiceStatus.Draft
     assert invoice.total() == _try("573409.28")
     assert rates.calls == [(Currency.EUR, Currency.TRY, AS_OF)]
+    assert "19.06.2026" in invoice.lines[0].description
+    assert "47.7841" in invoice.lines[0].description
 
 
 def test_same_currency_service_line_skips_fx():

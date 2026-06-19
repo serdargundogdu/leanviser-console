@@ -65,11 +65,18 @@ class CompileInvoice:
 
     def _service_line(self, item: ServiceItem, currency: Currency, as_of: date) -> InvoiceLine:
         if item.daily_rate.currency is currency:
-            unit_price = item.daily_rate  # aynı para birimi: doğrudan günlük ücret
-        else:
-            fx = self._rates.get_rate(item.daily_rate.currency, currency, as_of)
-            unit_price = FeeCalculation.to_try(item.daily_rate, fx)  # birim-önce
-        return InvoiceLine(description=item.description, unit_price=unit_price, quantity=item.days)
+            # aynı para birimi: doğrudan günlük ücret
+            return InvoiceLine(
+                description=item.description, unit_price=item.daily_rate, quantity=item.days
+            )
+        # döviz: TCMB kuruyla birim-önce TRY'ye çevrilir; kullanılan kur açıklamaya yazılır
+        fx = self._rates.get_rate(item.daily_rate.currency, currency, as_of)
+        unit_price = FeeCalculation.to_try(item.daily_rate, fx)
+        description = (
+            f"{item.description} ({item.daily_rate.currency.code} kuru "
+            f"{fx.as_of:%d.%m.%Y} · {fx.rate})"
+        )
+        return InvoiceLine(description=description, unit_price=unit_price, quantity=item.days)
 
     @staticmethod
     def _expense_line(expense: Expense, currency: Currency) -> InvoiceLine:
