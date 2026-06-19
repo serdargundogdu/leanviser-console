@@ -19,6 +19,15 @@ name: Deploy · Cloud Run
 #                      — gönderici kimliği (tanımlı olanlar env olarak geçer).
 # Gerekli Secret Manager secret'ları: DATABASE_URL, UYUMSOFT_USERNAME,
 # UYUMSOFT_PASSWORD — SA'ya roles/secretmanager.secretAccessor verilmeli.
+#
+# Erişim kontrolü (varsayılan GÜVENLİ — internete auth'suz açık DEĞİL):
+#   (varsayılan)        — --no-allow-unauthenticated: yalnız IAM run.invoker
+#                         olanlar ya da önündeki IAP erişebilir.
+#   PUBLIC_ACCESS=true  — bilinçli olarak herkese açar (--allow-unauthenticated).
+#   CLOUDRUN_INGRESS    — --ingress değeri (ör. internal-and-cloud-load-balancing).
+# Önerilen prod erişimi: harici HTTPS Load Balancer + IAP (Google/Workspace
+# kimliğiyle), ingress=internal-and-cloud-load-balancing. Uygulama auth'u yoktur
+# (tek-kiracılı); erişim kontrolü bu ağ/IAM katmanında yapılır.
 
 on:
   push:
@@ -73,6 +82,9 @@ jobs:
         env:
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCP_REGION: ${{ secrets.GCP_REGION }}
+          # Erişim kontrolü (varsayılan GÜVENLİ: auth'suz erişim kapalı):
+          PUBLIC_ACCESS: ${{ secrets.PUBLIC_ACCESS }}
+          CLOUDRUN_INGRESS: ${{ secrets.CLOUDRUN_INGRESS }}
           # Opsiyonel prod wiring (tanımlıysa eklenir; yoksa zarifçe atlanır):
           CLOUDSQL_INSTANCE: ${{ secrets.CLOUDSQL_INSTANCE }}
           UYUMSOFT_LIVE: ${{ secrets.UYUMSOFT_LIVE }}
@@ -89,8 +101,20 @@ jobs:
             --source backend
             --project "$GCP_PROJECT"
             --region "$GCP_REGION"
-            --platform managed
-            --allow-unauthenticated)
+            --platform managed)
+
+          # Erişim: varsayılan GÜVENLİ — auth'suz erişim kapalı (yalnız IAM invoker
+          # / önünde IAP). PUBLIC_ACCESS=true ile bilinçli olarak herkese açılır.
+          if [ "${PUBLIC_ACCESS:-}" = "true" ]; then
+            args+=(--allow-unauthenticated)
+          else
+            args+=(--no-allow-unauthenticated)
+          fi
+          # Ingress: tanımlıysa uygula (önerilen prod: internal-and-cloud-load-balancing
+          # -> harici HTTPS LB + IAP ile Google/Workspace kimliğiyle erişim).
+          if [ -n "${CLOUDRUN_INGRESS:-}" ]; then
+            args+=(--ingress "$CLOUDRUN_INGRESS")
+          fi
 
           run_secrets=()
           run_envs=()
@@ -126,4 +150,4 @@ jobs:
           fi
 
           gcloud "${args[@]}"
-          # Not: erişim kısıtlaması (allow-unauthenticated) sonraki turda gözden geçirilecek.
+          # Erişim varsayılan kapalıdır; herkese açık servis için PUBLIC_ACCESS=true gerekir.
