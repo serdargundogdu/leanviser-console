@@ -63,9 +63,9 @@ backend/
         domain/                   # saf iş kuralı
         application/              # use case + port
         adapters/                 # FastAPI/DB/ACL
-  tests/                          # pytest (health + framework-süz domain testleri)
-frontend/                         # Vite + React + TS; /finance placeholder
-.github/workflows/                # ci.yml (ruff+pytest+build), deploy.yml (Cloud Run iskeleti)
+  tests/                          # pytest (health + framework-süz domain + adapter testleri)
+frontend/                         # Vite + React + TS; /finance fatura derleme/kesme UI
+.github/workflows/                # ci.yml (ruff+pytest+build), deploy.yml (Cloud Run, secret-gated)
 ```
 
 ## PDCA çalışma yöntemi
@@ -93,12 +93,39 @@ Clean Code: küçük tek-sorumlu birimler; adlar Ubiquitous Language'ten; sihirl
 | Döviz Kuru (TCMB alış) | `fxBuyRate` |
 | Fatura / kalem / durum | `Invoice` / `InvoiceLine` / `InvoiceStatus` (Draft → Approved → Sent) |
 | Fatura Taslağı / Onay | `InvoiceDraft` / `Approval` |
+| KDV oranı | `VatRate` (kalem bazında; net üzerinden `vatAmount`) |
+| e-Fatura / e-Arşiv | `e-invoice` / `e-archive` (UBL profili: `TICARIFATURA` / `EARSIVFATURA`) |
+| GİB Fatura Numarası | `GibInvoiceNumber` (16 hane: seri+yıl+sıra; UBL `cbc:ID`) |
+| ETTN | `ettn` (entegratörce atanan e-belge kimliği/UUID) |
+| Alıcı Etiketi (PK) | `alias` (GİB posta kutusu; e-Fatura yönlendirme hedefi) |
+| Özel Entegratör | `EInvoiceGateway` port'u (Uyumsoft; CAPTCHA'sız SOAP — e-Devlet API'si değil) |
 | Anti-Corruption Layer | `ACL` (dış sistem adapter'ı; çekirdeği kirletmez) |
+
+## Tamamlanan dikey dilimler (finance)
+
+> Bu bölüm "ne hazır" özetidir; ayrıntı kod ve commit geçmişindedir.
+
+- **Bedel Hesaplama (Core, temel):** `Money`/`Currency` VO (Decimal, float yok), `VatRate`,
+  `ExchangeRate`/`FeeCalculation` (birim-önce TRY dönüşümü), kalem bazında KDV (net/KDV/brüt).
+- **Invoice aggregate:** `InvoiceLine` (KDV oranlı), durum makinesi Draft → Approved → Sent,
+  `CompileInvoice` use case.
+- **TCMB ACL:** `TcmbExchangeRateProvider` (canlı kur; yayınlanmamış günde önceki iş gününe düşer).
+- **Uyumsoft e-Fatura ACL (`EInvoiceGateway` port'u):** bağlantı, **gönderim** (UBL-TR +
+  `SendInvoice`, WSSE), **durum + günlük**, **PDF**, geçerli **GİB numarası üretimi** (seri+yıl+sıra,
+  atomik sayaç), **otomatik e-Fatura/e-Arşiv yönlendirme** (alıcı etiketi `GetUserAliasses` ile).
+  Hepsi test endpoint'inde uçtan uca doğrulandı. Prod yalnız env ile açılır.
+- **HTTP + Frontend:** `/finance` derleme/onay/**kesme**/durum/PDF/düzenle/sil akışı (TR biçim).
+- **Kalıcılık:** SQLite (yerel) + Postgres/Cloud SQL (prod) — aynı `InvoiceRepository` port'u.
+
+### Konfigürasyon (env; varsayılanlar herkese açık TEST'tir)
+
+- `DATABASE_URL` → Postgres (yoksa yerel SQLite).
+- `UYUMSOFT_USERNAME` / `UYUMSOFT_PASSWORD`, `UYUMSOFT_ENV=live` → canlı entegratör.
+- `LEANVISER_VKN` / `LEANVISER_NAME` / … → gerçek gönderici kimliği; `LEANVISER_INVOICE_SERIES` (vars. `LVS`).
 
 ## Kapsam dışı (sonraki turlar)
 
-- **Bedel Hesaplama domain mantığı** (Money VO, KDV ayrıştırma, gün × ücret, döviz dönüşümü) → sonraki dilim (**Core**).
-- **Google Calendar / Uyumsoft / TCMB** entegrasyonu → ileride ACL port'u olarak.
-  (Not: `api.uyum.com.tr` e-Devlet API'sinde CAPTCHA var → tam otomasyon yok; ticari e-Dönüşüm e-Fatura/e-Arşiv API dokümanı gelince ele alınır.)
-- Native masraf formu işlevi, kalıcılık/DB şeması → sonraki dikey dilim.
+- **İleri KDV senaryoları:** tevkifat, istisna, çok-oranlı matrah ayrıştırması (temel KDV hazır).
+- **Google Calendar** entegrasyonu → ileride ACL port'u olarak. (Uyumsoft ve TCMB ACL'leri **tamam**.)
+- **e-Fatura iyileştirmeleri:** birden çok alıcı etiketi arasında seçim, gelen kutusu (inbox) akışı.
 - Auth / multi-tenant → tek-kiracılı olduğu için gereksiz.
