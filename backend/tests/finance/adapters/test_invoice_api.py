@@ -36,10 +36,10 @@ class _FakeEInvoiceGateway:
 
     def __init__(self) -> None:
         self.result = EInvoiceSendResult(succeeded=True, invoice_id="X", ettn="ETTN-API")
-        self.is_user = False
+        self.aliases: tuple[str, ...] = ()  # boş -> e-Arşiv yolu
 
-    def is_einvoice_user(self, vkn_tckn: str, alias: str | None = None) -> bool:
-        return self.is_user
+    def get_recipient_aliases(self, vkn_tckn: str) -> tuple[str, ...]:
+        return self.aliases
 
     def send_invoice(self, req, *, customer_alias=None, local_document_id=None):
         return self.result

@@ -30,6 +30,13 @@ class EInvoiceGateway(Protocol):
         """Alıcı kayıtlı e-Fatura mükellefi mi? (e-Fatura vs e-Arşiv kararı)"""
         ...
 
+    def get_recipient_aliases(self, vkn_tckn: str) -> tuple[str, ...]:
+        """Kayıtlı alıcının GİB posta kutusu (PK) etiketleri; kayıtlı değilse boş.
+
+        Boş değilse alıcı e-Fatura mükellefidir ve ilk etiket hedef olarak kullanılır.
+        """
+        ...
+
     def send_invoice(
         self,
         req: EInvoiceRequest,

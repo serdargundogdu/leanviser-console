@@ -445,7 +445,7 @@ export default function FinancePage() {
             <label style={field}>
               <span style={labelText}>Alıcı etiketi</span>
               <input
-                placeholder="e-Fatura için; e-Arşiv'de boş bırakın"
+                placeholder="Boş bırakın — kayıtlı alıcıda otomatik bulunur"
                 value={issueCustomer.alias}
                 onChange={(e) => updateCustomer({ alias: e.target.value })}
               />

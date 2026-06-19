@@ -37,6 +37,16 @@ def test_is_einvoice_user_returns_bool():
     assert _gateway().is_einvoice_user("3360571475") in (True, False)
 
 
+def test_get_recipient_aliases_for_registered_user():
+    # Test hesabının VKN'si kayıtlı e-Fatura mükellefidir; PK etiketi 'defaultpk' içerir.
+    aliases = _gateway().get_recipient_aliases(_TEST_SENDER_VKN)
+    assert "defaultpk" in aliases
+
+
+def test_get_recipient_aliases_empty_for_unregistered():
+    assert _gateway().get_recipient_aliases("11111111111") == ()
+
+
 def test_send_invoice_earchive_succeeds():
     # Her koşuda benzersiz No/UUID (entegratör başarılı No'yu tekrar kabul etmez).
     number = f"LVS2026{int(time.time()) % 10**9:09d}"

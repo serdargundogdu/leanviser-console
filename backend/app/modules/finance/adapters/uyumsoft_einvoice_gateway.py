@@ -97,6 +97,19 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
     def is_einvoice_user(self, vkn_tckn: str, alias: str | None = None) -> bool:
         return bool(self._value(self._client.service.IsEInvoiceUser(vkn_tckn, alias)))
 
+    def get_recipient_aliases(self, vkn_tckn: str) -> tuple[str, ...]:
+        # Kayıtlı e-Fatura mükellefinin alıcı posta kutusu (PK) etiketleri; kayıtlı
+        # değilse Value None döner -> boş. e-Fatura gönderiminde hedef etiket budur.
+        value = self._value(self._client.service.GetUserAliasses(vkn_tckn))
+        if value is None:
+            return ()
+        aliases = getattr(value, "ReceiverboxAliases", None) or []
+        return tuple(
+            alias.Alias
+            for alias in aliases
+            if getattr(alias, "Alias", None) and getattr(alias, "Enabled", True)
+        )
+
     def send_invoice(
         self,
         req: EInvoiceRequest,

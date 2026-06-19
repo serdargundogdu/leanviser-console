@@ -52,11 +52,15 @@ class IssueEInvoice:
     def execute(self, invoice: Invoice, command: IssueEInvoiceCommand) -> EInvoiceSendResult:
         if invoice.status is not InvoiceStatus.Approved:
             raise EInvoiceIssueError("Yalnız onaylı fatura e-Fatura olarak kesilebilir")
-        profile = (
-            _EINVOICE_PROFILE
-            if self._gateway.is_einvoice_user(command.customer.tax_id)
-            else _EARCHIVE_PROFILE
-        )
+        # Alıcının kayıtlı PK etiketleri varsa e-Fatura (etiketi otomatik seç),
+        # yoksa e-Arşiv. Verilen customer_alias her zaman önceliklidir.
+        aliases = self._gateway.get_recipient_aliases(command.customer.tax_id)
+        if aliases:
+            profile = _EINVOICE_PROFILE
+            customer_alias = command.customer_alias or aliases[0]
+        else:
+            profile = _EARCHIVE_PROFILE
+            customer_alias = command.customer_alias
         request = EInvoiceRequest(
             number=command.gib_number,  # resmi GİB numarası -> cbc:ID
             uuid=str(uuid.uuid4()),
@@ -79,5 +83,5 @@ class IssueEInvoice:
         )
         # LocalDocumentId = iç fatura id (izlenebilirlik); cbc:ID = resmi numara.
         return self._gateway.send_invoice(
-            request, customer_alias=command.customer_alias, local_document_id=invoice.id
+            request, customer_alias=customer_alias, local_document_id=invoice.id
         )

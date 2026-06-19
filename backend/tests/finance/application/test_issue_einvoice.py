@@ -21,10 +21,12 @@ from app.modules.finance.domain.vat import VatRate
 
 
 class _FakeGateway:
-    """send_invoice çağrısını yakalayan, is_einvoice_user'ı ayarlanabilen sahte port."""
+    """send_invoice çağrısını yakalayan, alıcı etiketleri ayarlanabilen sahte port."""
 
-    def __init__(self, is_user: bool = False, result: EInvoiceSendResult | None = None) -> None:
-        self._is_user = is_user
+    def __init__(
+        self, aliases: tuple[str, ...] = (), result: EInvoiceSendResult | None = None
+    ) -> None:
+        self._aliases = aliases
         self._result = result or EInvoiceSendResult(
             succeeded=True, invoice_id="INV-1", ettn="ETTN-1"
         )
@@ -32,8 +34,8 @@ class _FakeGateway:
         self.sent_alias: str | None = None
         self.sent_local_document_id: str | None = None
 
-    def is_einvoice_user(self, vkn_tckn: str, alias: str | None = None) -> bool:
-        return self._is_user
+    def get_recipient_aliases(self, vkn_tckn: str) -> tuple[str, ...]:
+        return self._aliases
 
     def send_invoice(self, req, *, customer_alias=None, local_document_id=None):
         self.sent_request = req
@@ -88,16 +90,30 @@ def test_maps_invoice_lines_and_parties():
 
 
 def test_profile_is_earchive_for_unregistered_customer():
-    gateway = _FakeGateway(is_user=False)
+    gateway = _FakeGateway(aliases=())
     IssueEInvoice(gateway).execute(_approved_invoice(), _command())
     assert gateway.sent_request.profile == "EARSIVFATURA"
 
 
 def test_profile_is_einvoice_for_registered_customer():
-    gateway = _FakeGateway(is_user=True)
+    gateway = _FakeGateway(aliases=("defaultpk",))
     customer = Party(tax_id="3360571475", name="ACME A.Ş.", tax_office="Beşiktaş")
     IssueEInvoice(gateway).execute(_approved_invoice(), _command(customer))
     assert gateway.sent_request.profile == "TICARIFATURA"
+
+
+def test_registered_customer_auto_picks_first_alias():
+    gateway = _FakeGateway(aliases=("urn:mail:x@y.com", "defaultpk"))
+    customer = Party(tax_id="3360571475", name="ACME A.Ş.", tax_office="Beşiktaş")
+    # customer_alias verilmedi -> bulunan ilk etiket kullanılır
+    command = IssueEInvoiceCommand(
+        customer=customer,
+        supplier=Party(tax_id="9000068418", name="LeanViser", tax_office="Beşiktaş"),
+        gib_number="LVS2026000000001",
+    )
+    IssueEInvoice(gateway).execute(_approved_invoice(), command)
+    assert gateway.sent_request.profile == "TICARIFATURA"
+    assert gateway.sent_alias == "urn:mail:x@y.com"
 
 
 def test_draft_invoice_cannot_be_issued():
