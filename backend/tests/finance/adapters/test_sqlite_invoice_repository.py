@@ -58,3 +58,12 @@ def test_reconstitutes_approved_invoice():
     loaded = repo.get("INV-1")
     assert loaded is not None
     assert loaded.status is InvoiceStatus.Approved
+
+
+def test_list_all_returns_saved_invoices():
+    repo = SqliteInvoiceRepository(":memory:")
+    assert repo.list_all() == []
+    repo.save(_invoice())
+    invoices = repo.list_all()
+    assert len(invoices) == 1
+    assert invoices[0].id == "INV-1"

@@ -21,3 +21,7 @@ class InvoiceRepository(Protocol):
     def get(self, invoice_id: str) -> Invoice | None:
         """id ile faturayı döndürür; yoksa None."""
         ...
+
+    def list_all(self) -> list[Invoice]:
+        """Tüm kayıtlı faturaları döndürür."""
+        ...

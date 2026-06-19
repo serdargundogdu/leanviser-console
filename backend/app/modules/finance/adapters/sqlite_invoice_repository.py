@@ -51,6 +51,11 @@ class SqliteInvoiceRepository(InvoiceRepository):
             return None
         return _from_dict(json.loads(row[0]))
 
+    def list_all(self) -> list[Invoice]:
+        with self._lock:
+            rows = self._connection.execute("SELECT data FROM invoices ORDER BY id").fetchall()
+        return [_from_dict(json.loads(row[0])) for row in rows]
+
 
 def _to_dict(invoice: Invoice) -> dict:
     return {

@@ -100,3 +100,19 @@ def test_compiled_invoice_is_persisted_and_retrievable():
 def test_get_unknown_invoice_returns_404():
     response = client.get("/finance/invoices/NOPE")
     assert response.status_code == 404
+
+
+def test_list_invoices_includes_saved():
+    payload = {
+        "invoice_id": "INV-LIST",
+        "customer_company": "ACME",
+        "issue_date": "2026-06-19",
+        "currency": "TRY",
+        "service_items": [],
+        "expenses": [{"type": "Fuel", "gross": "120.00", "vat_rate": "0.20", "currency": "TRY"}],
+    }
+    client.post("/finance/invoices", json=payload)
+    response = client.get("/finance/invoices")
+    assert response.status_code == 200
+    ids = [invoice["id"] for invoice in response.json()]
+    assert "INV-LIST" in ids

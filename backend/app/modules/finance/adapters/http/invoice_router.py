@@ -162,6 +162,14 @@ def compile_invoice(
     return _to_response(invoice)
 
 
+@router.get("/invoices", response_model=list[InvoiceResponse])
+def list_invoices(
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+) -> list[InvoiceResponse]:
+    """Tüm kayıtlı faturaları döndürür."""
+    return [_to_response(invoice) for invoice in repository.list_all()]
+
+
 @router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
 def get_invoice(
     invoice_id: str,
