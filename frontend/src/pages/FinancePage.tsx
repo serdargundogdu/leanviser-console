@@ -3,6 +3,7 @@ import {
   approveInvoice,
   compileInvoice,
   deleteInvoice,
+  getInvoiceSource,
   listInvoices,
   sendInvoice,
   type InvoiceResponse,
@@ -111,6 +112,35 @@ export default function FinancePage() {
     try {
       await deleteInvoice(id);
       loadInvoices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleEdit(id: string) {
+    setError(null);
+    try {
+      const source = await getInvoiceSource(id);
+      setInvoiceId(source.invoice_id);
+      setCustomer(source.customer_company);
+      setIssueDate(source.issue_date);
+      setServiceItems(
+        source.service_items.map((s) => ({
+          description: s.description,
+          dailyRate: String(s.daily_rate),
+          currency: s.currency,
+          days: String(s.days),
+        })),
+      );
+      setExpenses(
+        source.expenses.map((e) => ({
+          type: e.type,
+          gross: String(e.gross),
+          vatRate: String(e.vat_rate),
+        })),
+      );
+      setInvoice(null);
+      window.scrollTo({ top: 0 });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -303,6 +333,7 @@ export default function FinancePage() {
                     {saved.status === "Draft" && (
                       <>
                         <button onClick={() => runTransition(approveInvoice, saved.id)}>Onayla</button>{" "}
+                        <button onClick={() => handleEdit(saved.id)}>Düzenle</button>{" "}
                         <button onClick={() => handleDelete(saved.id)}>Sil</button>
                       </>
                     )}

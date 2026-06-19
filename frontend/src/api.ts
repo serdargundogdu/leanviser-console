@@ -112,3 +112,15 @@ export async function deleteInvoice(id: string): Promise<void> {
     throw new Error(`Hata ${response.status}: ${detail}`);
   }
 }
+
+export async function getInvoiceSource(id: string): Promise<CompileInvoiceRequest> {
+  const response = await fetch(`/api/finance/invoices/${id}/source`);
+  if (!response.ok) {
+    throw new Error(
+      response.status === 404
+        ? "Bu faturanın kaynak girdileri yok (düzenlenemiyor)."
+        : `Hata ${response.status}`,
+    );
+  }
+  return (await response.json()) as CompileInvoiceRequest;
+}
