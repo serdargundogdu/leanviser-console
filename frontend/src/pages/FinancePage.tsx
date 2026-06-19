@@ -1,5 +1,11 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { compileInvoice, listInvoices, type InvoiceResponse } from "../api";
+import {
+  approveInvoice,
+  compileInvoice,
+  listInvoices,
+  sendInvoice,
+  type InvoiceResponse,
+} from "../api";
 
 const CURRENCIES = ["EUR", "USD", "TRY"];
 const EXPENSE_TYPES = ["Fuel", "Meal", "Parking", "Toll", "FlightTicket", "Other"];
@@ -55,6 +61,16 @@ export default function FinancePage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runTransition(action: (id: string) => Promise<InvoiceResponse>, id: string) {
+    setError(null);
+    try {
+      await action(id);
+      loadInvoices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -188,6 +204,7 @@ export default function FinancePage() {
                 <th style={leftCell}>Müşteri</th>
                 <th style={leftCell}>Durum</th>
                 <th style={rightCell}>Toplam</th>
+                <th style={leftCell}>İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -198,6 +215,15 @@ export default function FinancePage() {
                   <td style={leftCell}>{saved.status}</td>
                   <td style={rightCell}>
                     {saved.total} {saved.currency}
+                  </td>
+                  <td style={leftCell}>
+                    {saved.status === "Draft" && (
+                      <button onClick={() => runTransition(approveInvoice, saved.id)}>Onayla</button>
+                    )}
+                    {saved.status === "Approved" && (
+                      <button onClick={() => runTransition(sendInvoice, saved.id)}>Gönder</button>
+                    )}
+                    {saved.status === "Sent" && <span>Gönderildi</span>}
                   </td>
                 </tr>
               ))}

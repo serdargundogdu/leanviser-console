@@ -71,3 +71,28 @@ export async function listInvoices(): Promise<InvoiceResponse[]> {
   }
   return (await response.json()) as InvoiceResponse[];
 }
+
+async function transition(id: string, action: "approve" | "send"): Promise<InvoiceResponse> {
+  const response = await fetch(`/api/finance/invoices/${id}/${action}`, { method: "POST" });
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const data = JSON.parse(detail);
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // detail düz metin kalsın
+    }
+    throw new Error(`Hata ${response.status}: ${detail}`);
+  }
+  return (await response.json()) as InvoiceResponse;
+}
+
+export function approveInvoice(id: string): Promise<InvoiceResponse> {
+  return transition(id, "approve");
+}
+
+export function sendInvoice(id: string): Promise<InvoiceResponse> {
+  return transition(id, "send");
+}
