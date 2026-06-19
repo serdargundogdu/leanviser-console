@@ -3,14 +3,16 @@
 e-Fatura/e-Arşiv özel entegratörüyle (ör. Uyumsoft) konuşan ACL port'u. Somut
 karşılığı adapters/'tadır; bağımlılık içe akar (adapters -> application -> domain).
 
-Bu dilimde yalnız bağlantı/kimlik sağlığı ve alıcı sorgu tanımlı; fatura gönderimi
-(UBL-TR üretimi + SendInvoice), durum ve PDF sonraki dilimde eklenecek.
+Bağlantı/kimlik sağlığı, alıcı sorgu ve fatura gönderimi (UBL-TR + SendInvoice)
+tanımlı; durum sorgu ve PDF sonraki dilimde eklenecek.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Protocol
+
+from app.modules.finance.application.einvoice_models import EInvoiceRequest, EInvoiceSendResult
 
 
 class EInvoiceGateway(Protocol):
@@ -22,4 +24,18 @@ class EInvoiceGateway(Protocol):
 
     def is_einvoice_user(self, vkn_tckn: str, alias: str | None = None) -> bool:
         """Alıcı kayıtlı e-Fatura mükellefi mi? (e-Fatura vs e-Arşiv kararı)"""
+        ...
+
+    def send_invoice(
+        self,
+        req: EInvoiceRequest,
+        *,
+        customer_alias: str | None = None,
+        local_document_id: str | None = None,
+    ) -> EInvoiceSendResult:
+        """Faturayı entegratöre gönderir (UBL-TR üretip iletir).
+
+        İş kuralı reddini (IsSucceded=false) `succeeded=False` + mesaj olarak
+        döndürür; taşıma/SOAP hatalarında istisna atar.
+        """
         ...

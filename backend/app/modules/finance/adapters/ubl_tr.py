@@ -41,7 +41,14 @@ def _cac(parent: etree._Element, tag: str) -> etree._Element:
 def _party(parent: etree._Element, party: Party) -> None:
     p = _cac(parent, "Party")
     _cbc(_cac(p, "PartyIdentification"), "ID", party.tax_id, schemeID=party.scheme_id)
-    _cbc(_cac(p, "PartyName"), "Name", party.name)
+    if party.is_person:
+        # Gerçek kişi (TCKN): entegratör PartyName değil Person/Ad-Soyad bekler.
+        person = _cac(p, "Person")
+        first, family = party.person_names
+        _cbc(person, "FirstName", first)
+        _cbc(person, "FamilyName", family)
+    else:
+        _cbc(_cac(p, "PartyName"), "Name", party.name)
     addr = _cac(p, "PostalAddress")
     _cbc(addr, "StreetName", party.street or "-")
     _cbc(addr, "CitySubdivisionName", party.district or "-")
@@ -75,10 +82,14 @@ def _line(parent: etree._Element, index: int, line: EInvoiceLine, cur: str) -> N
     _cbc(_cac(el, "Price"), "PriceAmount", _money(line.unit_price), currencyID=cur)
 
 
-def build_ubl_tr(req: EInvoiceRequest) -> bytes:
-    """EInvoiceRequest'ten UBL-TR fatura XML'i üretir (UTF-8 bytes)."""
+def populate_invoice(root: etree._Element, req: EInvoiceRequest) -> None:
+    """UBL-TR fatura gövdesini (cbc/cac alt elemanları) verilen köke ekler.
+
+    Kök elemanın ad-uzayı çağırana bırakılır: tek-başına XML'de Invoice-2,
+    SendInvoice gömmesinde tempuri sarmalayıcısı (entegratör bu sarmalayıcıyı
+    bekler; kök Invoice-2 olursa faturayı okumaz). Çocuklar daima cbc/cac'tir.
+    """
     cur = req.currency
-    root = etree.Element(f"{{{_INV}}}Invoice", nsmap=_NSMAP)
     _cbc(root, "UBLVersionID", "2.1")
     _cbc(root, "CustomizationID", "TR1.2")
     _cbc(root, "ProfileID", req.profile)
@@ -86,6 +97,7 @@ def build_ubl_tr(req: EInvoiceRequest) -> bytes:
     _cbc(root, "CopyIndicator", "false")
     _cbc(root, "UUID", req.uuid)
     _cbc(root, "IssueDate", req.issue_date.isoformat())
+    _cbc(root, "IssueTime", req.issue_time)
     _cbc(root, "InvoiceTypeCode", req.invoice_type)
     _cbc(root, "DocumentCurrencyCode", cur)
     _cbc(root, "LineCountNumeric", len(req.lines))
@@ -116,4 +128,14 @@ def build_ubl_tr(req: EInvoiceRequest) -> bytes:
     for index, line in enumerate(req.lines, start=1):
         _line(root, index, line, cur)
 
-    return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
+
+def build_invoice_element(req: EInvoiceRequest) -> etree._Element:
+    """Tek-başına UBL-TR <Invoice> element ağacı (kök Invoice-2 ad-uzayında)."""
+    root = etree.Element(f"{{{_INV}}}Invoice", nsmap=_NSMAP)
+    populate_invoice(root, req)
+    return root
+
+
+def build_ubl_tr(req: EInvoiceRequest) -> bytes:
+    """EInvoiceRequest'ten tek-başına UBL-TR fatura XML'i üretir (UTF-8 bytes)."""
+    return etree.tostring(build_invoice_element(req), xml_declaration=True, encoding="UTF-8")
