@@ -116,3 +116,34 @@ def test_list_invoices_includes_saved():
     assert response.status_code == 200
     ids = [invoice["id"] for invoice in response.json()]
     assert "INV-LIST" in ids
+
+
+def _expense_payload(invoice_id: str) -> dict:
+    return {
+        "invoice_id": invoice_id,
+        "customer_company": "ACME",
+        "issue_date": "2026-06-19",
+        "currency": "TRY",
+        "service_items": [],
+        "expenses": [{"type": "Fuel", "gross": "120.00", "vat_rate": "0.20", "currency": "TRY"}],
+    }
+
+
+def test_approve_then_send_transitions():
+    client.post("/finance/invoices", json=_expense_payload("INV-FLOW"))
+    approved = client.post("/finance/invoices/INV-FLOW/approve")
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "Approved"
+    sent = client.post("/finance/invoices/INV-FLOW/send")
+    assert sent.status_code == 200
+    assert sent.json()["status"] == "Sent"
+
+
+def test_send_before_approve_returns_409():
+    client.post("/finance/invoices", json=_expense_payload("INV-DRAFT"))
+    response = client.post("/finance/invoices/INV-DRAFT/send")
+    assert response.status_code == 409
+
+
+def test_transition_unknown_invoice_returns_404():
+    assert client.post("/finance/invoices/NOPE/approve").status_code == 404

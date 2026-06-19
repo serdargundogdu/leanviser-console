@@ -6,6 +6,7 @@ Not: Bu dosya Pydantic kullandığı için PEP 563 (future annotations) bilinçl
 olarak kullanılmaz — Pydantic alan tiplerini kuruluşta gerçek tip olarak ister.
 """
 
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 from typing import Annotated
@@ -25,7 +26,7 @@ from app.modules.finance.application.compile_invoice import (
 from app.modules.finance.application.exchange_rate_provider import ExchangeRateProvider
 from app.modules.finance.application.invoice_repository import InvoiceRepository
 from app.modules.finance.domain.expense import Expense, ExpenseType
-from app.modules.finance.domain.invoice import Invoice
+from app.modules.finance.domain.invoice import Invoice, InvoiceStateError
 from app.modules.finance.domain.money import Currency, CurrencyMismatchError, Money
 from app.modules.finance.domain.vat import VatRate
 
@@ -180,3 +181,37 @@ def get_invoice(
     if invoice is None:
         raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
     return _to_response(invoice)
+
+
+def _transition(
+    invoice_id: str,
+    repository: InvoiceRepository,
+    action: Callable[[Invoice], None],
+) -> InvoiceResponse:
+    invoice = repository.get(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail=f"Fatura bulunamadı: {invoice_id}")
+    try:
+        action(invoice)
+    except InvoiceStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    repository.save(invoice)
+    return _to_response(invoice)
+
+
+@router.post("/invoices/{invoice_id}/approve", response_model=InvoiceResponse)
+def approve_invoice(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+) -> InvoiceResponse:
+    """Taslak faturayı onaylar (Draft -> Approved)."""
+    return _transition(invoice_id, repository, lambda invoice: invoice.approve())
+
+
+@router.post("/invoices/{invoice_id}/send", response_model=InvoiceResponse)
+def send_invoice(
+    invoice_id: str,
+    repository: Annotated[InvoiceRepository, Depends(get_invoice_repository)],
+) -> InvoiceResponse:
+    """Onaylı faturayı gönderir (Approved -> Sent)."""
+    return _transition(invoice_id, repository, lambda invoice: invoice.send())
