@@ -96,3 +96,19 @@ export function approveInvoice(id: string): Promise<InvoiceResponse> {
 export function sendInvoice(id: string): Promise<InvoiceResponse> {
   return transition(id, "send");
 }
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const response = await fetch(`/api/finance/invoices/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const data = JSON.parse(detail);
+      if (typeof data?.detail === "string") {
+        detail = data.detail;
+      }
+    } catch {
+      // detail düz metin kalsın
+    }
+    throw new Error(`Hata ${response.status}: ${detail}`);
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import {
   approveInvoice,
   compileInvoice,
+  deleteInvoice,
   listInvoices,
   sendInvoice,
   type InvoiceResponse,
@@ -12,9 +13,13 @@ const CURRENCIES = ["EUR", "USD", "TRY"];
 const EXPENSE_TYPES = ["Fuel", "Meal", "Parking", "Toll", "FlightTicket", "Other"];
 const VAT_RATES = ["0.00", "0.01", "0.10", "0.20"];
 
+type ServiceRow = { description: string; dailyRate: string; currency: string; days: string };
+type ExpenseRow = { type: string; gross: string; vatRate: string };
+
 const field: CSSProperties = { display: "flex", gap: 12, alignItems: "center", marginBottom: 8 };
-const labelText: CSSProperties = { minWidth: 130, color: "#374151" };
-const control: CSSProperties = { padding: "4px 6px", flex: 1, maxWidth: 280 };
+const labelText: CSSProperties = { minWidth: 110, color: "#374151" };
+const rowStyle: CSSProperties = { display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" };
+const addBtn: CSSProperties = { border: "1px dashed #9ca3af", borderRadius: 4, padding: "4px 10px", cursor: "pointer", background: "none", color: "#374151" };
 const leftCell: CSSProperties = { textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #eee" };
 const rightCell: CSSProperties = { textAlign: "right", padding: "6px 8px", borderBottom: "1px solid #eee" };
 
@@ -23,15 +28,15 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function FinancePage() {
+  const [invoiceId, setInvoiceId] = useState("INV-001");
   const [customer, setCustomer] = useState("ACME");
   const [issueDate, setIssueDate] = useState("2026-06-19");
-  const [svcDesc, setSvcDesc] = useState("Danışmanlık hizmet bedeli");
-  const [dailyRate, setDailyRate] = useState("750.00");
-  const [svcCurrency, setSvcCurrency] = useState("EUR");
-  const [days, setDays] = useState("16");
-  const [expType, setExpType] = useState("Fuel");
-  const [expGross, setExpGross] = useState("120.00");
-  const [expVat, setExpVat] = useState("0.20");
+  const [serviceItems, setServiceItems] = useState<ServiceRow[]>([
+    { description: "Danışmanlık hizmet bedeli", dailyRate: "750.00", currency: "EUR", days: "16" },
+  ]);
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([
+    { type: "Fuel", gross: "120.00", vatRate: "0.20" },
+  ]);
 
   const [invoice, setInvoice] = useState<InvoiceResponse | null>(null);
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
@@ -48,6 +53,13 @@ export default function FinancePage() {
 
   useEffect(loadInvoices, []);
 
+  function updateService(index: number, patch: Partial<ServiceRow>) {
+    setServiceItems((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+  function updateExpense(index: number, patch: Partial<ExpenseRow>) {
+    setExpenses((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -55,12 +67,22 @@ export default function FinancePage() {
     setInvoice(null);
     try {
       const result = await compileInvoice({
-        invoice_id: `INV-${issueDate}-${days}`,
+        invoice_id: invoiceId,
         customer_company: customer,
         issue_date: issueDate,
         currency: "TRY",
-        service_items: [{ description: svcDesc, daily_rate: dailyRate, currency: svcCurrency, days }],
-        expenses: [{ type: expType, gross: expGross, vat_rate: expVat, currency: "TRY" }],
+        service_items: serviceItems.map((s) => ({
+          description: s.description,
+          daily_rate: s.dailyRate,
+          currency: s.currency,
+          days: s.days,
+        })),
+        expenses: expenses.map((e) => ({
+          type: e.type,
+          gross: e.gross,
+          vat_rate: e.vatRate,
+          currency: "TRY",
+        })),
       });
       setInvoice(result);
       loadInvoices();
@@ -81,8 +103,21 @@ export default function FinancePage() {
     }
   }
 
+  async function handleDelete(id: string) {
+    if (!window.confirm(`${id} numaralı fatura silinsin mi?`)) {
+      return;
+    }
+    setError(null);
+    try {
+      await deleteInvoice(id);
+      loadInvoices();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   return (
-    <main style={{ maxWidth: 820, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui, sans-serif", color: "#111827" }}>
+    <main style={{ maxWidth: 860, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui, sans-serif", color: "#111827" }}>
       <h1>LeanViser CONSOLE</h1>
       <h2>Finans — Fatura Derleme</h2>
 
@@ -90,70 +125,111 @@ export default function FinancePage() {
         <fieldset>
           <legend>Fatura</legend>
           <label style={field}>
+            <span style={labelText}>Fatura No</span>
+            <input value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} />
+          </label>
+          <label style={field}>
             <span style={labelText}>Müşteri firma</span>
-            <input style={control} value={customer} onChange={(e) => setCustomer(e.target.value)} />
+            <input value={customer} onChange={(e) => setCustomer(e.target.value)} />
           </label>
           <label style={field}>
             <span style={labelText}>Fatura tarihi</span>
-            <input style={control} type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
           </label>
         </fieldset>
 
         <fieldset>
-          <legend>Hizmet kalemi</legend>
-          <label style={field}>
-            <span style={labelText}>Açıklama</span>
-            <input style={control} value={svcDesc} onChange={(e) => setSvcDesc(e.target.value)} />
-          </label>
-          <label style={field}>
-            <span style={labelText}>Günlük ücret</span>
-            <input style={control} value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} />
-          </label>
-          <label style={field}>
-            <span style={labelText}>Para birimi</span>
-            <select style={control} value={svcCurrency} onChange={(e) => setSvcCurrency(e.target.value)}>
-              {CURRENCIES.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={field}>
-            <span style={labelText}>Gün sayısı</span>
-            <input style={control} value={days} onChange={(e) => setDays(e.target.value)} />
-          </label>
+          <legend>Hizmet kalemleri</legend>
+          {serviceItems.map((row, index) => (
+            <div key={index} style={rowStyle}>
+              <input
+                placeholder="Açıklama"
+                value={row.description}
+                onChange={(e) => updateService(index, { description: e.target.value })}
+                style={{ flex: 2, minWidth: 160 }}
+              />
+              <input
+                placeholder="Günlük ücret"
+                value={row.dailyRate}
+                onChange={(e) => updateService(index, { dailyRate: e.target.value })}
+                style={{ width: 110 }}
+              />
+              <select value={row.currency} onChange={(e) => updateService(index, { currency: e.target.value })}>
+                {CURRENCIES.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+              <input
+                placeholder="Gün"
+                value={row.days}
+                onChange={(e) => updateService(index, { days: e.target.value })}
+                style={{ width: 64 }}
+              />
+              <button
+                type="button"
+                aria-label="Hizmet kalemini çıkar"
+                onClick={() => setServiceItems((rows) => rows.filter((_, i) => i !== index))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            style={addBtn}
+            onClick={() =>
+              setServiceItems((rows) => [...rows, { description: "", dailyRate: "0.00", currency: "EUR", days: "1" }])
+            }
+          >
+            + Hizmet kalemi
+          </button>
         </fieldset>
 
         <fieldset>
-          <legend>Masraf (TRY)</legend>
-          <label style={field}>
-            <span style={labelText}>Tür</span>
-            <select style={control} value={expType} onChange={(e) => setExpType(e.target.value)}>
-              {EXPENSE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={field}>
-            <span style={labelText}>Brüt (KDV dahil)</span>
-            <input style={control} value={expGross} onChange={(e) => setExpGross(e.target.value)} />
-          </label>
-          <label style={field}>
-            <span style={labelText}>KDV oranı</span>
-            <select style={control} value={expVat} onChange={(e) => setExpVat(e.target.value)}>
-              {VAT_RATES.map((rate) => (
-                <option key={rate} value={rate}>
-                  {rate}
-                </option>
-              ))}
-            </select>
-          </label>
+          <legend>Masraflar (TRY)</legend>
+          {expenses.map((row, index) => (
+            <div key={index} style={rowStyle}>
+              <select value={row.type} onChange={(e) => updateExpense(index, { type: e.target.value })}>
+                {EXPENSE_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              <input
+                placeholder="Brüt (KDV dahil)"
+                value={row.gross}
+                onChange={(e) => updateExpense(index, { gross: e.target.value })}
+                style={{ width: 140 }}
+              />
+              <select value={row.vatRate} onChange={(e) => updateExpense(index, { vatRate: e.target.value })}>
+                {VAT_RATES.map((rate) => (
+                  <option key={rate} value={rate}>
+                    KDV {rate}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                aria-label="Masrafı çıkar"
+                onClick={() => setExpenses((rows) => rows.filter((_, i) => i !== index))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            style={addBtn}
+            onClick={() => setExpenses((rows) => [...rows, { type: "Other", gross: "0.00", vatRate: "0.20" }])}
+          >
+            + Masraf
+          </button>
         </fieldset>
 
-        <button type="submit" disabled={loading} style={{ padding: "8px 16px", fontWeight: 600 }}>
+        <button type="submit" disabled={loading} style={{ padding: "8px 16px", fontWeight: 600, marginTop: 8 }}>
           {loading ? "Derleniyor…" : "Fatura Derle"}
         </button>
       </form>
@@ -225,7 +301,10 @@ export default function FinancePage() {
                   <td style={rightCell}>{formatMoney(saved.total, saved.currency)}</td>
                   <td style={leftCell}>
                     {saved.status === "Draft" && (
-                      <button onClick={() => runTransition(approveInvoice, saved.id)}>Onayla</button>
+                      <>
+                        <button onClick={() => runTransition(approveInvoice, saved.id)}>Onayla</button>{" "}
+                        <button onClick={() => handleDelete(saved.id)}>Sil</button>
+                      </>
                     )}
                     {saved.status === "Approved" && (
                       <button onClick={() => runTransition(sendInvoice, saved.id)}>Gönder</button>
