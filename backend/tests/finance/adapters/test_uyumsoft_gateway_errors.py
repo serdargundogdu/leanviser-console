@@ -39,6 +39,4 @@ def test_recipient_aliases_transport_failure_is_wrapped():
 def test_inbox_transport_failure_is_wrapped():
     # Gelen kutusu "Getir" akışının birebir karşılığı: ham HTTPError değil port hatası.
     with pytest.raises(EInvoiceGatewayError):
-        _unreachable_gateway().list_inbox_invoices(
-            datetime(2026, 1, 1), datetime(2026, 1, 31)
-        )
+        _unreachable_gateway().list_inbox_invoices(datetime(2026, 1, 1), datetime(2026, 1, 31))
