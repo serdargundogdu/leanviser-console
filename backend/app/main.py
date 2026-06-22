@@ -31,9 +31,7 @@ def health() -> dict[str, str]:
 
 
 # Derlenmiş SPA (prod imajında app/static; yerelde yoksa atlanır).
-_STATIC_DIR = Path(
-    os.environ.get("FRONTEND_DIST", str(Path(__file__).resolve().parent / "static"))
-)
+_STATIC_DIR = Path(os.environ.get("FRONTEND_DIST", str(Path(__file__).resolve().parent / "static")))
 
 if _STATIC_DIR.is_dir():
     _INDEX = _STATIC_DIR / "index.html"
