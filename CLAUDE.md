@@ -137,8 +137,13 @@ Clean Code: küçük tek-sorumlu birimler; adlar Ubiquitous Language'ten; sihirl
 - **Kalıcılık:** Cloud SQL Postgres `leanviser-console-db`; `DATABASE_URL` Secret Manager'da
   (Cloud SQL socket DSN), runtime SA `secretAccessor` + `cloudsql.client`. Uçtan uca doğrulandı.
 - **Entegratör:** şimdilik **TEST** (canlı için `UYUMSOFT_LIVE=true` + creds secret'ları + gerçek `LEANVISER_VKN`).
-- **Erişim (kalan iş):** IAP + harici HTTPS LB + `console.leanviser.app`, `CLOUDRUN_INGRESS=internal-and-cloud-load-balancing`.
-  Henüz kurulmadı — servis yalnız IAM `run.invoker` ile erişilebilir.
+- **Erişim (canlı):** `https://console.leanviser.app` → Cloud Run **domain mapping** (Google-yönetimli
+  SSL) → servise **doğrudan IAP** (Google-yönetimli OAuth; eski IAP brand/oauth API'si Mart 2026'da
+  kapandı, manuel client gerekmedi). Domain `leanviser.app` GoDaddy'de; `console` CNAME →
+  `ghs.googlehosted.com`. Yalnız **`roles/iap.httpsResourceAccessor` verilen kullanıcılar** girer
+  (şu an `serdargundogdu@`, `canyukselen@`). IAP servise `--iap` ile açıldı; harici HTTPS LB
+  **gerekmedi** (domain mapping + doğrudan IAP yeterli). run.app URL'i de IAP arkasında (anonim → giriş).
+  - IAP üye yönetimi: `gcloud iap web {add,remove}-iam-policy-binding --resource-type=cloud-run --service=leanviser-console-backend --region=europe-west1 --member=user:… --role=roles/iap.httpsResourceAccessor`.
 - **Cloud Build notu:** klasik docker builder (BuildKit'siz); Dockerfile'da `RUN --mount` kullanma.
 
 ## Kapsam dışı (sonraki turlar)
