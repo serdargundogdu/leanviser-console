@@ -35,6 +35,7 @@ name: Deploy · Cloud Run
 on:
   push:
     branches: ["main"]
+    paths-ignore: ["**.md", ".gitignore"]  # docs/ignore değişikliği boşuna deploy tetiklemesin
   workflow_dispatch:
 
 env:

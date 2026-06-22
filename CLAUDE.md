@@ -123,6 +123,24 @@ Clean Code: küçük tek-sorumlu birimler; adlar Ubiquitous Language'ten; sihirl
 - `UYUMSOFT_USERNAME` / `UYUMSOFT_PASSWORD`, `UYUMSOFT_ENV=live` → canlı entegratör.
 - `LEANVISER_VKN` / `LEANVISER_NAME` / … → gerçek gönderici kimliği; `LEANVISER_INVOICE_SERIES` (vars. `LVS`).
 
+## Prod dağıtımı (canlı)
+
+> Tek **Cloud Run** servisi hem derlenmiş SPA'yı hem API'yi sunar (tek origin; API `/api`
+> altında, kalan yollar SPA index.html). Kök `Dockerfile` (Cloud Build) ikisini de derler.
+
+- **GCP projesi:** `leanviser-console` (no `946068546869`), bölge `europe-west1`, org `leanviser.com`.
+- **Servis:** `leanviser-console-backend` — `--no-allow-unauthenticated` (güvenli varsayılan; anonim → 403).
+- **CI/CD:** `main`'e push → `deploy.yml`. Kimlik doğrulama **anahtarsız (WIF/OIDC)** —
+  org politikası SA anahtarını yasaklar (`iam.disableServiceAccountKeyCreation`). Deployer SA
+  `gha-deployer@…`; repo-kısıtlı WIF provider. GitHub secret'ları: `GCP_PROJECT`, `GCP_REGION`,
+  `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`, `CLOUDSQL_INSTANCE`.
+- **Kalıcılık:** Cloud SQL Postgres `leanviser-console-db`; `DATABASE_URL` Secret Manager'da
+  (Cloud SQL socket DSN), runtime SA `secretAccessor` + `cloudsql.client`. Uçtan uca doğrulandı.
+- **Entegratör:** şimdilik **TEST** (canlı için `UYUMSOFT_LIVE=true` + creds secret'ları + gerçek `LEANVISER_VKN`).
+- **Erişim (kalan iş):** IAP + harici HTTPS LB + `console.leanviser.app`, `CLOUDRUN_INGRESS=internal-and-cloud-load-balancing`.
+  Henüz kurulmadı — servis yalnız IAM `run.invoker` ile erişilebilir.
+- **Cloud Build notu:** klasik docker builder (BuildKit'siz); Dockerfile'da `RUN --mount` kullanma.
+
 ## Kapsam dışı (sonraki turlar)
 
 - **İleri KDV senaryoları:** tevkifat, istisna, çok-oranlı matrah ayrıştırması (temel KDV hazır).
