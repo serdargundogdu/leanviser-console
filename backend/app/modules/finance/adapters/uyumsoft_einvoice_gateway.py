@@ -20,7 +20,9 @@ from functools import cached_property
 
 from lxml import etree
 from requests import Session
+from requests.exceptions import RequestException
 from zeep import Client
+from zeep.exceptions import Error as ZeepError
 from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
@@ -77,11 +79,31 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
         transport = Transport(
             session=Session(), timeout=self._timeout, operation_timeout=self._timeout
         )
-        return Client(
-            self._wsdl_url,
-            transport=transport,
-            wsse=UsernameToken(self._username, self._password),
-        )
+        try:
+            return Client(
+                self._wsdl_url,
+                transport=transport,
+                wsse=UsernameToken(self._username, self._password),
+            )
+        except (RequestException, ZeepError) as exc:
+            # WSDL/taşıma hatası (ör. entegratör 503) -> port hatası; router 502'ye çevirir.
+            # cached_property başarısızlığı önbelleğe almaz: entegratör düzelince yeniden denenir.
+            raise EInvoiceGatewayError(
+                f"e-Fatura entegratörüne ulaşılamadı (geçici olabilir): {exc}"
+            ) from exc
+
+    def _invoke(self, operation: str, *args: object) -> object:
+        """Bir SOAP operasyonunu çağırır; taşıma/zeep hatalarını port hatasına sarar.
+
+        Böylece entegratör çalışma-anında çökse de (ör. 503) çekirdek ham
+        requests/zeep istisnası görmez; router temiz 502 + mesaj döndürür.
+        """
+        try:
+            return getattr(self._client.service, operation)(*args)
+        except (RequestException, ZeepError) as exc:
+            raise EInvoiceGatewayError(
+                f"e-Fatura entegratörü çağrısı başarısız ({operation}): {exc}"
+            ) from exc
 
     @cached_property
     def _session(self) -> Session:
@@ -95,15 +117,15 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
         return response.Value
 
     def get_system_date(self) -> datetime:
-        return self._value(self._client.service.GetSystemDate())
+        return self._value(self._invoke("GetSystemDate"))
 
     def is_einvoice_user(self, vkn_tckn: str, alias: str | None = None) -> bool:
-        return bool(self._value(self._client.service.IsEInvoiceUser(vkn_tckn, alias)))
+        return bool(self._value(self._invoke("IsEInvoiceUser", vkn_tckn, alias)))
 
     def get_recipient_aliases(self, vkn_tckn: str) -> tuple[str, ...]:
         # Kayıtlı e-Fatura mükellefinin alıcı posta kutusu (PK) etiketleri; kayıtlı
         # değilse Value None döner -> boş. e-Fatura gönderiminde hedef etiket budur.
-        value = self._value(self._client.service.GetUserAliasses(vkn_tckn))
+        value = self._value(self._invoke("GetUserAliasses", vkn_tckn))
         if value is None:
             return ()
         aliases = getattr(value, "ReceiverboxAliases", None) or []
@@ -129,16 +151,21 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
             "Content-Type": 'text/xml;charset="utf-8"',
             "SOAPAction": _SEND_INVOICE_ACTION,
         }
-        response = self._session.post(
-            self._endpoint, data=envelope, headers=headers, timeout=self._timeout
-        )
+        try:
+            response = self._session.post(
+                self._endpoint, data=envelope, headers=headers, timeout=self._timeout
+            )
+        except RequestException as exc:
+            raise EInvoiceGatewayError(
+                f"e-Fatura entegratörüne ulaşılamadı (geçici olabilir): {exc}"
+            ) from exc
         return self._parse_send_result(response.content)
 
     def get_invoice_status(self, invoice_id: str) -> EInvoiceStatus:
         # ArrayOfString tipini açıkça kurmak gerekir; düz liste boş gönderiliyor.
         array_of_string = self._client.get_type("ns0:ArrayOfString")
         value = self._value(
-            self._client.service.GetOutboxInvoiceStatusWithLogs(array_of_string([invoice_id]))
+            self._invoke("GetOutboxInvoiceStatusWithLogs", array_of_string([invoice_id]))
         )
         if not value:
             raise EInvoiceGatewayError(f"Durum bilgisi bulunamadı: {invoice_id}")
@@ -158,7 +185,7 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
         )
 
     def get_invoice_pdf(self, invoice_id: str) -> bytes:
-        value = self._value(self._client.service.GetOutboxInvoicePdf(invoice_id))
+        value = self._value(self._invoke("GetOutboxInvoicePdf", invoice_id))
         data = getattr(value, "Data", None)
         if not data:
             raise EInvoiceGatewayError(f"PDF bulunamadı: {invoice_id}")
@@ -180,7 +207,7 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
             IsArchived=False,  # zorunlu bool
             OnlyNewestInvoices=False,  # zorunlu bool
         )
-        value = self._value(self._client.service.GetInboxInvoiceList(query))
+        value = self._value(self._invoke("GetInboxInvoiceList", query))
         items = getattr(value, "Items", None) or []
         return InboxInvoicePage(
             items=tuple(
@@ -202,7 +229,7 @@ class UyumsoftEInvoiceGateway(EInvoiceGateway):
         )
 
     def get_inbox_invoice_pdf(self, document_id: str) -> bytes:
-        value = self._value(self._client.service.GetInboxInvoicePdf(document_id))
+        value = self._value(self._invoke("GetInboxInvoicePdf", document_id))
         data = getattr(value, "Data", None)
         if not data:
             raise EInvoiceGatewayError(f"Gelen fatura PDF bulunamadı: {document_id}")
