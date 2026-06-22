@@ -109,7 +109,7 @@ def test_compile_invoice_returns_lines_and_total():
         ],
         "expenses": [{"type": "Fuel", "gross": "120.00", "vat_rate": "0.20", "currency": "TRY"}],
     }
-    response = client.post("/finance/invoices", json=payload)
+    response = client.post("/api/finance/invoices", json=payload)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "Draft"
@@ -136,7 +136,7 @@ def test_response_includes_vat_breakdown():
         ],
         "expenses": [],
     }
-    body = client.post("/finance/invoices", json=payload).json()
+    body = client.post("/api/finance/invoices", json=payload).json()
     assert body["total"] == "2000.00"  # net
     assert body["vat_total"] == "400.00"
     assert body["gross_total"] == "2400.00"
@@ -153,7 +153,7 @@ def test_invalid_currency_returns_422():
         "service_items": [],
         "expenses": [],
     }
-    response = client.post("/finance/invoices", json=payload)
+    response = client.post("/api/finance/invoices", json=payload)
     assert response.status_code == 422
 
 
@@ -166,7 +166,7 @@ def test_disallowed_vat_rate_returns_422():
         "service_items": [],
         "expenses": [{"type": "Fuel", "gross": "120.00", "vat_rate": "0.05", "currency": "TRY"}],
     }
-    response = client.post("/finance/invoices", json=payload)
+    response = client.post("/api/finance/invoices", json=payload)
     assert response.status_code == 422
 
 
@@ -179,16 +179,16 @@ def test_compiled_invoice_is_persisted_and_retrievable():
         "service_items": [],
         "expenses": [{"type": "Fuel", "gross": "120.00", "vat_rate": "0.20", "currency": "TRY"}],
     }
-    post = client.post("/finance/invoices", json=payload)
+    post = client.post("/api/finance/invoices", json=payload)
     assert post.status_code == 200
-    got = client.get("/finance/invoices/INV-9")
+    got = client.get("/api/finance/invoices/INV-9")
     assert got.status_code == 200
     assert got.json()["id"] == "INV-9"
     assert got.json()["total"] == post.json()["total"] == "100.00"
 
 
 def test_get_unknown_invoice_returns_404():
-    response = client.get("/finance/invoices/NOPE")
+    response = client.get("/api/finance/invoices/NOPE")
     assert response.status_code == 404
 
 
@@ -201,8 +201,8 @@ def test_list_invoices_includes_saved():
         "service_items": [],
         "expenses": [{"type": "Fuel", "gross": "120.00", "vat_rate": "0.20", "currency": "TRY"}],
     }
-    client.post("/finance/invoices", json=payload)
-    response = client.get("/finance/invoices")
+    client.post("/api/finance/invoices", json=payload)
+    response = client.get("/api/finance/invoices")
     assert response.status_code == 200
     ids = [invoice["id"] for invoice in response.json()]
     assert "INV-LIST" in ids
@@ -220,23 +220,23 @@ def _expense_payload(invoice_id: str) -> dict:
 
 
 def test_approve_then_send_transitions():
-    client.post("/finance/invoices", json=_expense_payload("INV-FLOW"))
-    approved = client.post("/finance/invoices/INV-FLOW/approve")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-FLOW"))
+    approved = client.post("/api/finance/invoices/INV-FLOW/approve")
     assert approved.status_code == 200
     assert approved.json()["status"] == "Approved"
-    sent = client.post("/finance/invoices/INV-FLOW/send")
+    sent = client.post("/api/finance/invoices/INV-FLOW/send")
     assert sent.status_code == 200
     assert sent.json()["status"] == "Sent"
 
 
 def test_issue_einvoice_marks_sent_and_records_ettn():
-    client.post("/finance/invoices", json=_expense_payload("INV-ISSUE"))
-    client.post("/finance/invoices/INV-ISSUE/approve")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-ISSUE"))
+    client.post("/api/finance/invoices/INV-ISSUE/approve")
     _fake_gateway.result = EInvoiceSendResult(
         succeeded=True, invoice_id="INV-ISSUE", ettn="ETTN-API"
     )
     response = client.post(
-        "/finance/invoices/INV-ISSUE/issue",
+        "/api/finance/invoices/INV-ISSUE/issue",
         json={"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}},
     )
     assert response.status_code == 200
@@ -246,11 +246,11 @@ def test_issue_einvoice_marks_sent_and_records_ettn():
 
 
 def test_issue_assigns_gib_number():
-    client.post("/finance/invoices", json=_expense_payload("INV-GIB"))
-    client.post("/finance/invoices/INV-GIB/approve")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-GIB"))
+    client.post("/api/finance/invoices/INV-GIB/approve")
     _fake_gateway.result = EInvoiceSendResult(succeeded=True, invoice_id="INV-GIB", ettn="ETTN-GIB")
     body = client.post(
-        "/finance/invoices/INV-GIB/issue",
+        "/api/finance/invoices/INV-GIB/issue",
         json={"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}},
     ).json()
     assert body["status"] == "Sent"
@@ -258,57 +258,57 @@ def test_issue_assigns_gib_number():
 
 
 def test_issue_retry_reuses_gib_number():
-    client.post("/finance/invoices", json=_expense_payload("INV-RETRY"))
-    client.post("/finance/invoices/INV-RETRY/approve")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-RETRY"))
+    client.post("/api/finance/invoices/INV-RETRY/approve")
     payload = {"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}}
     # İlk deneme entegratörce reddedilir; numara atanır ve faturada kalır.
     _fake_gateway.result = EInvoiceSendResult(succeeded=False, message="geçici hata")
-    assert client.post("/finance/invoices/INV-RETRY/issue", json=payload).status_code == 422
-    assigned = client.get("/finance/invoices/INV-RETRY").json()["gib_number"]
+    assert client.post("/api/finance/invoices/INV-RETRY/issue", json=payload).status_code == 422
+    assigned = client.get("/api/finance/invoices/INV-RETRY").json()["gib_number"]
     assert assigned is not None
     # Yeniden deneme aynı numarayı kullanır (ardışıklık korunur, boşluk olmaz).
     _fake_gateway.result = EInvoiceSendResult(
         succeeded=True, invoice_id="INV-RETRY", ettn="ETTN-RETRY"
     )
-    retry = client.post("/finance/invoices/INV-RETRY/issue", json=payload).json()
+    retry = client.post("/api/finance/invoices/INV-RETRY/issue", json=payload).json()
     assert retry["gib_number"] == assigned
 
 
 def test_issue_unapproved_invoice_returns_409():
-    client.post("/finance/invoices", json=_expense_payload("INV-ISSUE-D"))
+    client.post("/api/finance/invoices", json=_expense_payload("INV-ISSUE-D"))
     response = client.post(
-        "/finance/invoices/INV-ISSUE-D/issue",
+        "/api/finance/invoices/INV-ISSUE-D/issue",
         json={"customer": {"tax_id": "11111111111", "name": "X Y"}},
     )
     assert response.status_code == 409
 
 
 def test_issue_business_failure_returns_422_and_keeps_approved():
-    client.post("/finance/invoices", json=_expense_payload("INV-ISSUE-F"))
-    client.post("/finance/invoices/INV-ISSUE-F/approve")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-ISSUE-F"))
+    client.post("/api/finance/invoices/INV-ISSUE-F/approve")
     _fake_gateway.result = EInvoiceSendResult(succeeded=False, message="alıcı hatalı")
     response = client.post(
-        "/finance/invoices/INV-ISSUE-F/issue",
+        "/api/finance/invoices/INV-ISSUE-F/issue",
         json={"customer": {"tax_id": "11111111111", "name": "X Y"}},
     )
     assert response.status_code == 422
     assert "alıcı" in response.json()["detail"]
-    assert client.get("/finance/invoices/INV-ISSUE-F").json()["status"] == "Approved"
+    assert client.get("/api/finance/invoices/INV-ISSUE-F").json()["status"] == "Approved"
 
 
 def _issue(invoice_id: str, ettn: str) -> None:
-    client.post("/finance/invoices", json=_expense_payload(invoice_id))
-    client.post(f"/finance/invoices/{invoice_id}/approve")
+    client.post("/api/finance/invoices", json=_expense_payload(invoice_id))
+    client.post(f"/api/finance/invoices/{invoice_id}/approve")
     _fake_gateway.result = EInvoiceSendResult(succeeded=True, invoice_id=invoice_id, ettn=ettn)
     client.post(
-        f"/finance/invoices/{invoice_id}/issue",
+        f"/api/finance/invoices/{invoice_id}/issue",
         json={"customer": {"tax_id": "11111111111", "name": "Ahmet Yılmaz"}},
     )
 
 
 def test_einvoice_status_after_issue():
     _issue("INV-ST", "ETTN-ST")
-    response = client.get("/finance/invoices/INV-ST/einvoice-status")
+    response = client.get("/api/finance/invoices/INV-ST/einvoice-status")
     assert response.status_code == 200
     body = response.json()
     assert body["invoice_id"] == "ETTN-ST"  # ETTN ile sorgulanır
@@ -319,7 +319,7 @@ def test_einvoice_status_after_issue():
 
 def test_einvoice_pdf_after_issue():
     _issue("INV-PDF", "ETTN-PDF")
-    response = client.get("/finance/invoices/INV-PDF/einvoice-pdf")
+    response = client.get("/api/finance/invoices/INV-PDF/einvoice-pdf")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
@@ -328,7 +328,7 @@ def test_einvoice_pdf_after_issue():
 def test_recipient_aliases_returns_list():
     _fake_gateway.aliases = ("defaultpk", "urn:mail:x@y.com")
     try:
-        body = client.get("/finance/recipient-aliases/9000068418").json()
+        body = client.get("/api/finance/recipient-aliases/9000068418").json()
         assert body["vkn_tckn"] == "9000068418"
         assert body["aliases"] == ["defaultpk", "urn:mail:x@y.com"]
     finally:
@@ -336,12 +336,12 @@ def test_recipient_aliases_returns_list():
 
 
 def test_recipient_aliases_empty_for_unregistered():
-    body = client.get("/finance/recipient-aliases/11111111111").json()
+    body = client.get("/api/finance/recipient-aliases/11111111111").json()
     assert body["aliases"] == []
 
 
 def test_inbox_lists_received_invoices():
-    body = client.get("/finance/inbox").json()
+    body = client.get("/api/finance/inbox").json()
     assert body["total_count"] == 1
     item = body["items"][0]
     assert item["document_id"] == "doc-1"
@@ -352,58 +352,59 @@ def test_inbox_lists_received_invoices():
 
 
 def test_inbox_invoice_pdf():
-    response = client.get("/finance/inbox/doc-1/pdf")
+    response = client.get("/api/finance/inbox/doc-1/pdf")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
 
 
 def test_einvoice_status_not_issued_returns_409():
-    client.post("/finance/invoices", json=_expense_payload("INV-NOISSUE"))
-    assert client.get("/finance/invoices/INV-NOISSUE/einvoice-status").status_code == 409
-    assert client.get("/finance/invoices/INV-NOISSUE/einvoice-pdf").status_code == 409
+    client.post("/api/finance/invoices", json=_expense_payload("INV-NOISSUE"))
+    assert client.get("/api/finance/invoices/INV-NOISSUE/einvoice-status").status_code == 409
+    assert client.get("/api/finance/invoices/INV-NOISSUE/einvoice-pdf").status_code == 409
 
 
 def test_send_before_approve_returns_409():
-    client.post("/finance/invoices", json=_expense_payload("INV-DRAFT"))
-    response = client.post("/finance/invoices/INV-DRAFT/send")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-DRAFT"))
+    response = client.post("/api/finance/invoices/INV-DRAFT/send")
     assert response.status_code == 409
 
 
 def test_transition_unknown_invoice_returns_404():
-    assert client.post("/finance/invoices/NOPE/approve").status_code == 404
+    assert client.post("/api/finance/invoices/NOPE/approve").status_code == 404
 
 
 def test_delete_draft_invoice():
-    client.post("/finance/invoices", json=_expense_payload("INV-DEL"))
-    deleted = client.delete("/finance/invoices/INV-DEL")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-DEL"))
+    deleted = client.delete("/api/finance/invoices/INV-DEL")
     assert deleted.status_code == 204
-    assert client.get("/finance/invoices/INV-DEL").status_code == 404
+    assert client.get("/api/finance/invoices/INV-DEL").status_code == 404
 
 
 def test_delete_non_draft_returns_409():
-    client.post("/finance/invoices", json=_expense_payload("INV-DEL2"))
-    client.post("/finance/invoices/INV-DEL2/approve")
-    assert client.delete("/finance/invoices/INV-DEL2").status_code == 409
+    client.post("/api/finance/invoices", json=_expense_payload("INV-DEL2"))
+    client.post("/api/finance/invoices/INV-DEL2/approve")
+    assert client.delete("/api/finance/invoices/INV-DEL2").status_code == 409
 
 
 def test_delete_unknown_returns_404():
-    assert client.delete("/finance/invoices/NOPE").status_code == 404
+    assert client.delete("/api/finance/invoices/NOPE").status_code == 404
 
 
 def test_compile_stores_source_for_edit():
-    client.post("/finance/invoices", json=_expense_payload("INV-SRC"))
-    source = client.get("/finance/invoices/INV-SRC/source")
+    client.post("/api/finance/invoices", json=_expense_payload("INV-SRC"))
+    source = client.get("/api/finance/invoices/INV-SRC/source")
     assert source.status_code == 200
     assert source.json()["invoice_id"] == "INV-SRC"
     assert source.json()["expenses"][0]["type"] == "Fuel"
 
 
 def test_source_missing_returns_404():
-    assert client.get("/finance/invoices/NOPE/source").status_code == 404
+    assert client.get("/api/finance/invoices/NOPE/source").status_code == 404
 
 
 def test_recompile_non_draft_returns_409():
-    client.post("/finance/invoices", json=_expense_payload("INV-LOCK"))
-    client.post("/finance/invoices/INV-LOCK/approve")
-    assert client.post("/finance/invoices", json=_expense_payload("INV-LOCK")).status_code == 409
+    client.post("/api/finance/invoices", json=_expense_payload("INV-LOCK"))
+    client.post("/api/finance/invoices/INV-LOCK/approve")
+    relock = client.post("/api/finance/invoices", json=_expense_payload("INV-LOCK"))
+    assert relock.status_code == 409

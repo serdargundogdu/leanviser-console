@@ -28,3 +28,6 @@ dist/
 
 # Local SQLite (runtime)
 *.db
+
+# Tek-servis prod build çıktısı (backend tarafından sunulur; imajda üretilir)
+backend/app/static/

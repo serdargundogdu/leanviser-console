@@ -47,16 +47,23 @@ npm run dev      # http://localhost:5173  (/finance placeholder)
 npm run build    # üretim derlemesi -> dist/
 ```
 
-## Docker (backend)
+## Docker (tek servis: SPA + API)
+
+Kök `Dockerfile` çok aşamalıdır: önce frontend'i (Vite → `dist/`) derler, sonra backend'i
+kurar ve derlenmiş SPA'yı imaja koyar. **Build context repo köküdür.**
 
 ```bash
-cd backend
-docker build -t leanviser-console-backend .
-docker run -p 8080:8080 leanviser-console-backend
-curl http://localhost:8080/health
+docker build -t leanviser-console .
+docker run -p 8080:8080 leanviser-console
+curl http://localhost:8080/health          # -> {"status":"ok"}
+open  http://localhost:8080/finance         # SPA (arayüz)
+curl http://localhost:8080/api/finance/invoices   # API (/api altında)
 ```
 
-Çok aşamalı imaj `uvicorn` ile çalışır ve Cloud Run'ın enjekte ettiği `$PORT`'u kullanır (varsayılan 8080).
+İmaj `uvicorn` ile çalışır ve Cloud Run'ın enjekte ettiği `$PORT`'u kullanır (varsayılan 8080).
+FastAPI API'yi **`/api`** altında, derlenmiş SPA'yı geri kalan tüm yollarda sunar — tek origin,
+CORS yok. Geliştirmede arayüz Vite'tan (`:5173`), API backend'ten (`:8000`) gelir; Vite `/api`
+isteklerini backend'e proxy'ler (ön ek korunur), böylece yollar prod ile birebir aynıdır.
 
 ## CI / CD
 

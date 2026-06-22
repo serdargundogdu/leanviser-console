@@ -6,7 +6,8 @@ name: Deploy · Cloud Run
 #   GCP_SA_KEY   — deploy yetkili Service Account JSON anahtarı
 # Secret'lar tanımlı değilken deploy işi ATLANIR (workflow kırmızıya düşmez);
 # secret'lar girilince main push veya manuel tetikte gerçek deploy çalışır.
-# Backend, Dockerfile üzerinden kaynaktan (Cloud Build) derlenip dağıtılır.
+# Tek servis: kök Dockerfile (Cloud Build) hem SPA'yı (Vite) hem backend'i derler;
+# FastAPI API'yi /api altında, derlenmiş SPA'yı geri kalan yollarda sunar (tek origin).
 #
 # Opsiyonel prod wiring (tanımlı OLANLAR eklenir; yoksa varsayılanlarla çalışır):
 #   CLOUDSQL_INSTANCE  — Cloud SQL bağlantı adı (PROJECT:REGION:INSTANCE).
@@ -98,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           args=(run deploy "$SERVICE"
-            --source backend
+            --source .
             --project "$GCP_PROJECT"
             --region "$GCP_REGION"
             --platform managed)

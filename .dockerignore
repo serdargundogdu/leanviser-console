@@ -1,0 +1,23 @@
+# Build context = repo kökü. Imaja girmeyecekler (küçük context + reprodüksiyon):
+.git/
+.gitignore
+.github/
+README.md
+CLAUDE.md
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+backend/.venv/
+backend/tests/
+*.db
+*.sqlite3
+
+# Node / frontend (imaj içinde yeniden kurulur/derlenir)
+**/node_modules/
+frontend/dist/
+
+# Yerel
+.DS_Store
