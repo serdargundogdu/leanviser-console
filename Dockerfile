@@ -23,10 +23,11 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
-# Önce yalnız bağımlılık manifestleri — katman önbelleği için kod'dan ayrı
+# Önce yalnız bağımlılık manifestleri — katman önbelleği için kod'dan ayrı.
+# Not: cache mount kullanılmaz — Cloud Build klasik docker builder'ı (BuildKit'siz)
+# `--mount`'u desteklemez. Katman önbelleği yine de manifest/kod ayrımıyla çalışır.
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 # ---- Runtime: slim imaj, yalnız çalıştırma ----
 FROM python:3.12-slim AS runtime
